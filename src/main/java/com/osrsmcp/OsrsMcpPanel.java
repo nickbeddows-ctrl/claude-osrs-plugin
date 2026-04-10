@@ -29,8 +29,9 @@ public class OsrsMcpPanel extends PluginPanel
     private final JLabel  localUrlLabel  = new JLabel();
     private final JButton restartButton  = new JButton("Restart server");
 
-    // Dynamic setup code block
-    private final JTextArea setupCodeBlock = new JTextArea();
+    // Setup
+    private final JTextArea setupCodeBlock  = new JTextArea();
+    private final JButton   copyConfigBtn   = new JButton("Copy config");
     private int            currentPort  = 8282;
     private String         currentLanIp = null;
     private ConnectionMode currentMode  = ConnectionMode.LOCAL;
@@ -42,8 +43,8 @@ public class OsrsMcpPanel extends PluginPanel
     private final JButton relayUrlCopy  = new JButton("Copy");
     private final JPanel  relayUrlRow   = new JPanel(new BorderLayout(4, 0));
     private final JPanel  relaySection  = new JPanel();
+    private String        fullRelayUrl  = null;
 
-    // Restart callback
     private Runnable restartCallback;
 
     public OsrsMcpPanel()
@@ -154,6 +155,25 @@ public class OsrsMcpPanel extends PluginPanel
         styleCodeBlock(setupCodeBlock);
         refreshSetupBlock();
         p.add(setupCodeBlock);
+        p.add(Box.createVerticalStrut(4));
+
+        // Copy config button
+        styleButton(copyConfigBtn);
+        copyConfigBtn.setAlignmentX(LEFT_ALIGNMENT);
+        copyConfigBtn.addActionListener(e -> {
+            String text = setupCodeBlock.getText();
+            if (text != null && !text.isEmpty())
+            {
+                Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new StringSelection(text), null);
+                copyConfigBtn.setText("Copied!");
+                Timer t = new Timer(1500, ev -> copyConfigBtn.setText("Copy config"));
+                t.setRepeats(false);
+                t.start();
+            }
+        });
+        p.add(copyConfigBtn);
+
         p.add(Box.createVerticalStrut(6));
         p.add(smallLabel("2. Restart Claude Desktop."));
         p.add(Box.createVerticalStrut(2));
@@ -185,12 +205,18 @@ public class OsrsMcpPanel extends PluginPanel
 
         relayUrlLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
         relayUrlLabel.setForeground(ColorScheme.BRAND_ORANGE);
+
         styleButton(relayUrlCopy);
         relayUrlCopy.addActionListener(e -> {
-            String url = relayUrlLabel.getText();
-            if (url != null && !url.isEmpty())
+            if (fullRelayUrl != null)
+            {
                 Toolkit.getDefaultToolkit().getSystemClipboard()
-                    .setContents(new StringSelection(url), null);
+                    .setContents(new StringSelection(fullRelayUrl), null);
+                relayUrlCopy.setText("Copied!");
+                Timer t = new Timer(1500, ev -> relayUrlCopy.setText("Copy"));
+                t.setRepeats(false);
+                t.start();
+            }
         });
 
         relayUrlRow.setBackground(SECTION_BG);
@@ -236,10 +262,10 @@ public class OsrsMcpPanel extends PluginPanel
                 argsLine = "      \"" + url + "\",\n      \"--allow-http\"]";
                 break;
             case CLOUD_RELAY:
-                url = "https://YOUR_RELAY_URL/mcp";
+                url = fullRelayUrl != null ? fullRelayUrl : "https://YOUR_RELAY_URL/mcp";
                 argsLine = "      \"" + url + "\"]";
                 break;
-            default: // LOCAL
+            default:
                 url = "http://127.0.0.1:" + currentPort + "/mcp";
                 argsLine = "      \"" + url + "\"]";
                 break;
@@ -401,29 +427,32 @@ public class OsrsMcpPanel extends PluginPanel
                     relayDot.setForeground(Color.GRAY);
                     relayText.setText("Disabled");
                     relayUrlRow.setVisible(false);
+                    fullRelayUrl = null;
                     break;
                 case CONNECTING:
                     relayDot.setForeground(ColorScheme.BRAND_ORANGE);
                     relayText.setText("Connecting...");
                     relayUrlRow.setVisible(false);
+                    fullRelayUrl = null;
                     break;
                 case ACTIVE:
                     relayDot.setForeground(GREEN);
                     relayText.setText("Active");
-                    relayUrlLabel.setText(url);
+                    fullRelayUrl = url;
+                    // Truncate display label, full URL in tooltip
+                    String display = url != null && url.length() > 30
+                        ? url.substring(0, 30) + "..." : url;
+                    relayUrlLabel.setText(display);
+                    relayUrlLabel.setToolTipText(url);
+                    relayUrlRow.setToolTipText(url);
                     relayUrlRow.setVisible(true);
                     // Update setup block with real relay URL
-                    setupCodeBlock.setText(
-                        "\"osrs\": {\n" +
-                        "  \"command\": \"npx\",\n" +
-                        "  \"args\": [\"mcp-remote\",\n" +
-                        "      \"" + url + "\"]\n" +
-                        "}"
-                    );
+                    refreshSetupBlock();
                     break;
                 case ERROR:
                     relayDot.setForeground(ColorScheme.PROGRESS_ERROR_COLOR);
                     relayText.setText("Failed");
+                    fullRelayUrl = null;
                     relayUrlLabel.setText(url != null ? url : "");
                     relayUrlRow.setVisible(url != null && !url.isEmpty());
                     break;
