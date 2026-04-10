@@ -318,7 +318,7 @@ public class OsrsMcpPanel extends PluginPanel
                 SwingUtilities.invokeLater(() -> {
                     refreshSteps();
                     genKeyBtn.setEnabled(true);
-                    genKeyBtn.setText(ok ? "Regenerate key" : "Failed — try again");
+                    genKeyBtn.setText(ok ? "Generate key" : "Failed — try again");
                 });
             }, "osrs-mcp-keygen").start();
         });
@@ -332,6 +332,7 @@ public class OsrsMcpPanel extends PluginPanel
                 flash(copyKeyBtn, "Copied!", "Copy public key");
             }
         });
+        // Only show generate button if no key exists; copy key is always shown when key exists
         p.add(genKeyBtn);
         p.add(copyKeyBtn);
         return p;
@@ -462,13 +463,14 @@ public class OsrsMcpPanel extends PluginPanel
             {
                 step1Label.setText("<html>SSH key ready</html>");
                 step1Label.setForeground(STEP_DONE);
-                genKeyBtn.setText("Regenerate key");
+                genKeyBtn.setVisible(false);
                 copyKeyBtn.setEnabled(true);
             }
             else
             {
                 step1Label.setText("<html>Generate a dedicated SSH key for this plugin</html>");
                 step1Label.setForeground(STEP_ACTIVE);
+                genKeyBtn.setVisible(true);
                 genKeyBtn.setText("Generate key");
                 copyKeyBtn.setEnabled(false);
             }
