@@ -24,24 +24,26 @@ public class OsrsMcpPanel extends PluginPanel
     // Status
     private final JLabel  statusDot      = new JLabel("⬤");
     private final JLabel  statusText     = new JLabel("Starting...");
+    private final JLabel  statusMode     = new JLabel();
     private final JLabel  gameStateLabel = new JLabel("Not logged in");
     private final JLabel  localUrlLabel  = new JLabel();
     private final JButton restartButton  = new JButton("Restart server");
 
     // Dynamic setup code block
     private final JTextArea setupCodeBlock = new JTextArea();
-    private int    currentPort  = 8282;
-    private String currentLanIp = null;
+    private int            currentPort  = 8282;
+    private String         currentLanIp = null;
+    private ConnectionMode currentMode  = ConnectionMode.LOCAL;
 
     // Relay
-    private final JLabel  relayDot     = new JLabel("⬤");
-    private final JLabel  relayText    = new JLabel("Disabled");
+    private final JLabel  relayDot      = new JLabel("⬤");
+    private final JLabel  relayText     = new JLabel("Disabled");
     private final JLabel  relayUrlLabel = new JLabel();
     private final JButton relayUrlCopy  = new JButton("Copy");
     private final JPanel  relayUrlRow   = new JPanel(new BorderLayout(4, 0));
     private final JPanel  relaySection  = new JPanel();
 
-    // Restart callback — set by the plugin after injection
+    // Restart callback
     private Runnable restartCallback;
 
     public OsrsMcpPanel()
@@ -78,10 +80,7 @@ public class OsrsMcpPanel extends PluginPanel
         add(root, BorderLayout.NORTH);
     }
 
-    public void setRestartCallback(Runnable callback)
-    {
-        this.restartCallback = callback;
-    }
+    public void setRestartCallback(Runnable cb) { this.restartCallback = cb; }
 
     // ── SECTION BUILDERS ─────────────────────────────────────────────────────
 
@@ -107,6 +106,12 @@ public class OsrsMcpPanel extends PluginPanel
         statusRow.add(Box.createHorizontalStrut(4));
         statusRow.add(statusText);
         p.add(statusRow);
+
+        JPanel modeRow = hRow();
+        statusMode.setFont(FontManager.getRunescapeSmallFont());
+        statusMode.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+        modeRow.add(statusMode);
+        p.add(modeRow);
 
         JPanel stateRow = hRow();
         gameStateLabel.setFont(FontManager.getRunescapeSmallFont());
@@ -138,7 +143,6 @@ public class OsrsMcpPanel extends PluginPanel
             }
         });
         p.add(restartButton);
-
         return p;
     }
 
@@ -198,9 +202,8 @@ public class OsrsMcpPanel extends PluginPanel
         relaySection.add(Box.createVerticalStrut(2));
         relaySection.add(relayUrlRow);
         relaySection.add(Box.createVerticalStrut(6));
-        relaySection.add(smallLabel("Enable in settings to connect across"));
-        relaySection.add(smallLabel("different networks without extra software."));
-
+        relaySection.add(smallLabel("Set mode to \"Cloud relay\" in settings"));
+        relaySection.add(smallLabel("to connect across different networks."));
         return relaySection;
     }
 
@@ -222,13 +225,25 @@ public class OsrsMcpPanel extends PluginPanel
 
     private void refreshSetupBlock()
     {
-        String url = currentLanIp != null
-            ? "http://" + currentLanIp + ":" + currentPort + "/mcp"
-            : "http://127.0.0.1:" + currentPort + "/mcp";
+        String url;
+        String argsLine;
 
-        String argsLine = currentLanIp != null
-            ? "      \"" + url + "\",\n      \"--allow-http\"]"
-            : "      \"" + url + "\"]";
+        switch (currentMode)
+        {
+            case LAN:
+                String ip = currentLanIp != null ? currentLanIp : "YOUR_LAN_IP";
+                url = "http://" + ip + ":" + currentPort + "/mcp";
+                argsLine = "      \"" + url + "\",\n      \"--allow-http\"]";
+                break;
+            case CLOUD_RELAY:
+                url = "https://YOUR_RELAY_URL/mcp";
+                argsLine = "      \"" + url + "\"]";
+                break;
+            default: // LOCAL
+                url = "http://127.0.0.1:" + currentPort + "/mcp";
+                argsLine = "      \"" + url + "\"]";
+                break;
+        }
 
         setupCodeBlock.setText(
             "\"osrs\": {\n" +
@@ -338,30 +353,34 @@ public class OsrsMcpPanel extends PluginPanel
 
     // ── PUBLIC STATE METHODS ─────────────────────────────────────────────────
 
-    public void setServerRunning(boolean running, int port, String lanIp)
+    public void setServerRunning(boolean running, int port, ConnectionMode mode, String lanIp)
     {
         SwingUtilities.invokeLater(() ->
         {
             currentPort  = port;
+            currentMode  = mode;
             currentLanIp = running ? lanIp : null;
+
             statusDot.setForeground(running ? GREEN : Color.GRAY);
             statusText.setText(running ? "MCP server running" : "MCP server stopped");
+            statusMode.setText(running ? "Mode: " + mode.toString() : "");
+
             if (running)
             {
-                String displayUrl = lanIp != null
+                String displayUrl = (mode == ConnectionMode.LAN && lanIp != null)
                     ? "http://" + lanIp + ":" + port + "/mcp"
-                    : "http://127.0.0.1:" + port + "/mcp";
+                    : (mode == ConnectionMode.LOCAL)
+                        ? "http://127.0.0.1:" + port + "/mcp"
+                        : "";
                 localUrlLabel.setText(displayUrl);
             }
-            else
-            {
-                localUrlLabel.setText("");
-            }
+            else { localUrlLabel.setText(""); }
+
             refreshSetupBlock();
         });
     }
 
-    public void setStatus(boolean running, int port) { setServerRunning(running, port, null); }
+    public void setStatus(boolean running, int port) { setServerRunning(running, port, ConnectionMode.LOCAL, null); }
 
     public void setError(String message)
     {
@@ -393,6 +412,14 @@ public class OsrsMcpPanel extends PluginPanel
                     relayText.setText("Active");
                     relayUrlLabel.setText(url);
                     relayUrlRow.setVisible(true);
+                    // Update setup block with real relay URL
+                    setupCodeBlock.setText(
+                        "\"osrs\": {\n" +
+                        "  \"command\": \"npx\",\n" +
+                        "  \"args\": [\"mcp-remote\",\n" +
+                        "      \"" + url + "\"]\n" +
+                        "}"
+                    );
                     break;
                 case ERROR:
                     relayDot.setForeground(ColorScheme.PROGRESS_ERROR_COLOR);

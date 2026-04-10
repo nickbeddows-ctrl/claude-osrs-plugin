@@ -12,27 +12,20 @@ public interface OsrsMcpConfig extends Config
     String connectionSection = "connection";
 
     @ConfigItem(keyName = "port", name = "Port",
-        description = "Port the local MCP server listens on. Restart the plugin after changing.",
+        description = "Port the local MCP server listens on. Click Restart server after changing.",
         section = connectionSection, position = 0)
     default int port() { return 8282; }
 
-    @ConfigItem(keyName = "allowLan", name = "Allow LAN connections",
-        description = "Bind to all network interfaces so devices on the same subnet can connect. " +
-                      "Set an Auth Token if you enable this.",
+    @ConfigItem(keyName = "connectionMode", name = "Connection mode",
+        description = "<html><b>Local</b> — same machine only (default)<br>" +
+                      "<b>LAN</b> — devices on the same network/subnet<br>" +
+                      "<b>Cloud relay</b> — any device on any network, uses a free SSH tunnel (no extra software needed, SSH is built into macOS and Windows 10+)</html>",
         section = connectionSection, position = 1)
-    default boolean allowLan() { return false; }
-
-    @ConfigItem(keyName = "relayEnabled", name = "Cloud relay",
-        description = "Creates a public HTTPS tunnel via SSH so any device can connect regardless " +
-                      "of network. Uses serveo.net with localhost.run as fallback. " +
-                      "SSH must be available (built into macOS and Windows 10/11). " +
-                      "The relay URL is shown in the plugin panel.",
-        section = connectionSection, position = 2)
-    default boolean relayEnabled() { return false; }
+    default ConnectionMode connectionMode() { return ConnectionMode.LOCAL; }
 
     @ConfigItem(keyName = "authToken", name = "Auth Token",
-        description = "Optional Bearer token. Recommended when LAN or Cloud Relay is enabled.",
-        section = connectionSection, position = 3, secret = true)
+        description = "Optional Bearer token. Recommended when using LAN or Cloud Relay mode.",
+        section = connectionSection, position = 2, secret = true)
     default String authToken() { return ""; }
 
     @ConfigSection(name = "Privacy", description = "Control what data the AI can access", position = 1)

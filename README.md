@@ -56,7 +56,7 @@ The default. RuneLite and your AI tool are on the same machine. No extra configu
 
 Use this when RuneLite is on one device and your AI tool is on another, and both are on the **same router/subnet** (e.g. both on the same WiFi, or both on Ethernet from the same router).
 
-1. In the plugin settings, enable **Allow LAN connections**, then click **Restart server** in the plugin panel (or disable and re-enable the plugin)
+1. In the plugin settings, set **Connection mode** to **LAN** in settings, then click **Restart server** in the plugin panel (or disable and re-enable the plugin)
 2. Find the local IP of the machine running RuneLite:
    - **macOS:** `ipconfig getifaddr en0` in Terminal
    - **Windows:** `ipconfig` in Command Prompt, look for IPv4 Address
@@ -145,8 +145,7 @@ The plugin works with any MCP-compatible tool, not just Claude Desktop.
 | Setting | Default | Description |
 |---------|---------|-------------|
 | Port | 8282 | Port the MCP server listens on |
-| Allow LAN connections | Off | Mode 2: bind to all interfaces |
-| Cloud relay | Off | Mode 3: public HTTPS tunnel via SSH |
+| Connection mode | Local | Local, LAN, or Cloud relay (mutually exclusive) |
 | Auth Token | (empty) | Optional Bearer token |
 | Share skill levels | On | Allow the AI to read your skills |
 | Share equipment | On | Allow the AI to see equipped gear |

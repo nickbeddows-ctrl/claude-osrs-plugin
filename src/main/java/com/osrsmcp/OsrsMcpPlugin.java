@@ -62,18 +62,22 @@ public class OsrsMcpPlugin extends Plugin
 
     private void startServer()
     {
+        ConnectionMode mode = config.connectionMode();
+
         try
         {
             mcpServer.start(config.port());
-            panel.setServerRunning(true, config.port(), config.allowLan() ? getLanIp() : null);
+            String lanIp = (mode == ConnectionMode.LAN) ? getLanIp() : null;
+            panel.setServerRunning(true, config.port(), mode, lanIp);
         }
         catch (IOException e)
         {
-            log.error("OSRS MCP: Failed to start MCP server on port {}", config.port(), e);
+            log.error("OSRS MCP: Failed to start on port {}", config.port(), e);
             panel.setError("Port " + config.port() + " is in use. Change it in settings.");
+            return;
         }
 
-        if (config.relayEnabled())
+        if (mode == ConnectionMode.CLOUD_RELAY)
         {
             panel.setRelayStatus(OsrsMcpPanel.RelayStatus.CONNECTING, null);
             relayService.start(
@@ -88,7 +92,7 @@ public class OsrsMcpPlugin extends Plugin
     {
         relayService.stop();
         mcpServer.stop();
-        panel.setServerRunning(false, 0, null);
+        panel.setServerRunning(false, 0, ConnectionMode.LOCAL, null);
         panel.setRelayStatus(OsrsMcpPanel.RelayStatus.OFF, null);
     }
 
