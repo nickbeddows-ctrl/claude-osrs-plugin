@@ -27,13 +27,18 @@ public class OsrsMcpPanel extends PluginPanel
     private final JLabel gameStateLabel = new JLabel("Not logged in");
     private final JLabel localUrlLabel  = new JLabel();
 
+    // Dynamic setup code block
+    private final JTextArea setupCodeBlock = new JTextArea();
+    private int    currentPort  = 8282;
+    private String currentLanIp = null;
+
     // Relay
-    private final JLabel relayDot       = new JLabel("⬤");
-    private final JLabel relayText      = new JLabel("Disabled");
-    private final JLabel relayUrlLabel  = new JLabel();
+    private final JLabel  relayDot    = new JLabel("⬤");
+    private final JLabel  relayText   = new JLabel("Disabled");
+    private final JLabel  relayUrlLabel = new JLabel();
     private final JButton relayUrlCopy  = new JButton("Copy");
-    private final JPanel relayUrlRow    = new JPanel(new BorderLayout(4, 0));
-    private final JPanel relaySection   = new JPanel();
+    private final JPanel  relayUrlRow   = new JPanel(new BorderLayout(4, 0));
+    private final JPanel  relaySection  = new JPanel();
 
     public OsrsMcpPanel()
     {
@@ -114,17 +119,13 @@ public class OsrsMcpPanel extends PluginPanel
         JPanel p = box(true);
         p.add(smallLabel("1. Add to Claude Desktop config:"));
         p.add(Box.createVerticalStrut(4));
-        p.add(codeBlock(
-            "\"osrs\": {\n" +
-            "  \"command\": \"npx\",\n" +
-            "  \"args\": [\"mcp-remote\",\n" +
-            "    \"http://127.0.0.1:8282/mcp\"]\n" +
-            "}"
-        ));
+        styleCodeBlock(setupCodeBlock);
+        refreshSetupBlock();
+        p.add(setupCodeBlock);
         p.add(Box.createVerticalStrut(6));
         p.add(smallLabel("2. Restart Claude Desktop."));
         p.add(Box.createVerticalStrut(2));
-        p.add(smallLabel("3. Ask Claude about your stats!"));
+        p.add(smallLabel("3. Ask your AI about your stats!"));
         return p;
     }
 
@@ -192,6 +193,28 @@ public class OsrsMcpPanel extends PluginPanel
         return p;
     }
 
+    // ── SETUP CODE BLOCK ─────────────────────────────────────────────────────
+
+    private void refreshSetupBlock()
+    {
+        String url = currentLanIp != null
+            ? "http://" + currentLanIp + ":" + currentPort + "/mcp"
+            : "http://127.0.0.1:" + currentPort + "/mcp";
+
+        boolean isLan = currentLanIp != null;
+        String argsLine = isLan
+            ? "      \"" + url + "\",\n      \"--allow-http\"]"
+            : "      \"" + url + "\"]";
+
+        setupCodeBlock.setText(
+            "\"osrs\": {\n" +
+            "  \"command\": \"npx\",\n" +
+            "  \"args\": [\"mcp-remote\",\n" +
+            argsLine + "\n" +
+            "}"
+        );
+    }
+
     // ── COMPONENT HELPERS ────────────────────────────────────────────────────
 
     private JSeparator buildSeparator()
@@ -220,15 +243,15 @@ public class OsrsMcpPanel extends PluginPanel
         row.setBorder(new EmptyBorder(4, 8, 4, 8));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
         row.setAlignmentX(LEFT_ALIGNMENT);
-        JLabel nameLabel = new JLabel(name);
-        nameLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
-        nameLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        JLabel descLabel = new JLabel(desc);
-        descLabel.setFont(FontManager.getRunescapeSmallFont());
-        descLabel.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
-        descLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-        row.add(nameLabel, BorderLayout.WEST);
-        row.add(descLabel, BorderLayout.EAST);
+        JLabel n = new JLabel(name);
+        n.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
+        n.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        JLabel d = new JLabel(desc);
+        d.setFont(FontManager.getRunescapeSmallFont());
+        d.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+        d.setHorizontalAlignment(SwingConstants.RIGHT);
+        row.add(n, BorderLayout.WEST);
+        row.add(d, BorderLayout.EAST);
         return row;
     }
 
@@ -266,9 +289,8 @@ public class OsrsMcpPanel extends PluginPanel
         return l;
     }
 
-    private JTextArea codeBlock(String text)
+    private void styleCodeBlock(JTextArea area)
     {
-        JTextArea area = new JTextArea(text);
         area.setEditable(false);
         area.setBackground(ColorScheme.DARK_GRAY_COLOR);
         area.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
@@ -276,8 +298,7 @@ public class OsrsMcpPanel extends PluginPanel
         area.setLineWrap(false);
         area.setBorder(new EmptyBorder(2, 2, 2, 2));
         area.setAlignmentX(LEFT_ALIGNMENT);
-        area.setMaximumSize(new Dimension(Integer.MAX_VALUE, 80));
-        return area;
+        area.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
     }
 
     private void styleButton(JButton btn)
@@ -292,14 +313,39 @@ public class OsrsMcpPanel extends PluginPanel
 
     // ── PUBLIC STATE METHODS ─────────────────────────────────────────────────
 
-    public void setStatus(boolean running, int port)
+    /**
+     * @param lanIp non-null when LAN mode is active, null for local-only mode
+     */
+    public void setServerRunning(boolean running, int port, String lanIp)
     {
         SwingUtilities.invokeLater(() ->
         {
+            currentPort  = port;
+            currentLanIp = running ? lanIp : null;
+
             statusDot.setForeground(running ? GREEN : Color.GRAY);
             statusText.setText(running ? "MCP server running" : "MCP server stopped");
-            localUrlLabel.setText(running ? "http://127.0.0.1:" + port + "/mcp" : "");
+
+            if (running)
+            {
+                String displayUrl = lanIp != null
+                    ? "http://" + lanIp + ":" + port + "/mcp"
+                    : "http://127.0.0.1:" + port + "/mcp";
+                localUrlLabel.setText(displayUrl);
+            }
+            else
+            {
+                localUrlLabel.setText("");
+            }
+
+            refreshSetupBlock();
         });
+    }
+
+    // Keep old signature for safety
+    public void setStatus(boolean running, int port)
+    {
+        setServerRunning(running, port, null);
     }
 
     public void setError(String message)

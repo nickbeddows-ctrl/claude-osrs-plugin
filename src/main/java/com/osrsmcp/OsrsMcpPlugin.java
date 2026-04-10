@@ -15,6 +15,10 @@ import net.runelite.client.util.ImageUtil;
 import javax.inject.Inject;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.util.Collections;
 
 @Slf4j
 @PluginDescriptor(
@@ -39,7 +43,7 @@ public class OsrsMcpPlugin extends Plugin
         try
         {
             mcpServer.start(config.port());
-            panel.setStatus(true, config.port());
+            panel.setServerRunning(true, config.port(), config.allowLan() ? getLanIp() : null);
         }
         catch (IOException e)
         {
@@ -73,7 +77,7 @@ public class OsrsMcpPlugin extends Plugin
         relayService.stop();
         mcpServer.stop();
         clientToolbar.removeNavigation(navButton);
-        panel.setStatus(false, 0);
+        panel.setServerRunning(false, 0, null);
         panel.setRelayStatus(OsrsMcpPanel.RelayStatus.OFF, null);
     }
 
@@ -87,5 +91,29 @@ public class OsrsMcpPlugin extends Plugin
     OsrsMcpConfig provideConfig(ConfigManager configManager)
     {
         return configManager.getConfig(OsrsMcpConfig.class);
+    }
+
+    /**
+     * Returns the first non-loopback IPv4 LAN address, or null if none found.
+     */
+    private String getLanIp()
+    {
+        try
+        {
+            for (NetworkInterface iface : Collections.list(NetworkInterface.getNetworkInterfaces()))
+            {
+                if (!iface.isUp() || iface.isLoopback() || iface.isVirtual()) continue;
+                for (InetAddress addr : Collections.list(iface.getInetAddresses()))
+                {
+                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress())
+                        return addr.getHostAddress();
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            log.warn("OSRS MCP: Could not determine LAN IP", e);
+        }
+        return null;
     }
 }
