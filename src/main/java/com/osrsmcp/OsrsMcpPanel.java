@@ -451,7 +451,11 @@ public class OsrsMcpPanel extends PluginPanel
         {
             if (relayKeyService == null) return;
             boolean hasKey = relayKeyService.keyExists();
-            boolean active = fullRelayUrl != null && fullRelayUrl.length() > 10;
+            String sub = subdomainField.getText().trim();
+            // "Stable URL active" only when the running URL actually contains the subdomain
+            boolean stableActive = fullRelayUrl != null && !sub.isEmpty()
+                && fullRelayUrl.toLowerCase().contains(sub.toLowerCase());
+            boolean active = stableActive;
 
             // Step 1 — SSH key
             if (hasKey)
@@ -477,7 +481,6 @@ public class OsrsMcpPanel extends PluginPanel
             openRegBtn.setEnabled(hasKey);
 
             // Step 3 — Add domain on serveo
-            String sub = subdomainField.getText().trim();
             String subHint = sub.isEmpty() ? "yourname-osrs-mcp" : sub;
             step3Label.setText(hasKey
                 ? "<html>Copy the domain URL, open it in your browser, click Add Domain and enter <b>" + subHint + "</b></html>"
@@ -486,10 +489,12 @@ public class OsrsMcpPanel extends PluginPanel
             openDomainBtn.setEnabled(hasKey);
 
             // Step 4 — Enter subdomain in panel and save
-            step4Label.setText(active
+            step4Label.setText(stableActive
                 ? "<html>Stable URL active!</html>"
-                : "<html>Type your subdomain below and click Save & restart.</html>");
-            step4Label.setForeground(active ? STEP_DONE : (hasKey ? STEP_ACTIVE : STEP_TODO));
+                : (fullRelayUrl != null && !sub.isEmpty() && !stableActive)
+                    ? "<html>Random URL is active but subdomain not matched yet. Check your subdomain is registered on serveo, then Save & restart.</html>"
+                    : "<html>Type your subdomain below and click Save & restart.</html>");
+            step4Label.setForeground(stableActive ? STEP_DONE : (hasKey ? STEP_ACTIVE : STEP_TODO));
         });
     }
 

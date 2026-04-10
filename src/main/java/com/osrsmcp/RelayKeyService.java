@@ -103,7 +103,16 @@ public class RelayKeyService
     {
         String fp = getFingerprint();
         if (fp == null) return "https://console.serveo.net";
-        return "https://console.serveo.net/ssh/keys?add=" + fp.replace(":", "%3A");
+        try
+        {
+            // Properly URL-encode the fingerprint (handles +, /, = as well as :)
+            String encoded = java.net.URLEncoder.encode(fp, java.nio.charset.StandardCharsets.UTF_8.name());
+            return "https://console.serveo.net/ssh/keys?add=" + encoded;
+        }
+        catch (Exception e)
+        {
+            return "https://console.serveo.net";
+        }
     }
 
     public String getKeyPath() { return KEY_PATH; }
