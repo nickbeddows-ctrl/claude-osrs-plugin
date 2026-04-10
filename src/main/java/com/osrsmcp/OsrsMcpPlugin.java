@@ -19,7 +19,7 @@ import java.io.IOException;
 @Slf4j
 @PluginDescriptor(
     name = "OSRS MCP",
-    description = "Connects RuneLite to Claude AI via a local MCP server for context-aware in-game assistance.",
+    description = "Exposes RuneLite data via a local MCP server for AI-assisted in-game advice.",
     tags = {"claude", "ai", "stats", "helper", "assistant", "mcp"}
 )
 public class OsrsMcpPlugin extends Plugin
@@ -29,6 +29,7 @@ public class OsrsMcpPlugin extends Plugin
     @Inject private OsrsMcpConfig config;
     @Inject private McpServer mcpServer;
     @Inject private OsrsMcpPanel panel;
+    @Inject private RelayService relayService;
 
     private NavigationButton navButton;
 
@@ -45,6 +46,17 @@ public class OsrsMcpPlugin extends Plugin
             log.error("OSRS MCP: Failed to start MCP server on port {}", config.port(), e);
             panel.setError("Port " + config.port() + " is in use. Change it in settings.");
         }
+
+        if (config.relayEnabled())
+        {
+            panel.setRelayStatus(OsrsMcpPanel.RelayStatus.CONNECTING, null);
+            relayService.start(
+                config.port(),
+                url -> panel.setRelayStatus(OsrsMcpPanel.RelayStatus.ACTIVE, url),
+                err -> panel.setRelayStatus(OsrsMcpPanel.RelayStatus.ERROR, err)
+            );
+        }
+
         final BufferedImage icon = ImageUtil.loadImageResource(getClass(), "icon.png");
         navButton = NavigationButton.builder()
             .tooltip("OSRS MCP")
@@ -58,9 +70,11 @@ public class OsrsMcpPlugin extends Plugin
     @Override
     protected void shutDown() throws Exception
     {
+        relayService.stop();
         mcpServer.stop();
         clientToolbar.removeNavigation(navButton);
         panel.setStatus(false, 0);
+        panel.setRelayStatus(OsrsMcpPanel.RelayStatus.OFF, null);
     }
 
     @Subscribe

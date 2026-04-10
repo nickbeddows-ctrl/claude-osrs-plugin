@@ -1,95 +1,304 @@
 package com.osrsmcp;
 
-import net.runelite.api.GameState;
+import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
+import net.runelite.api.GameState;
 
 import javax.inject.Singleton;
 import javax.swing.*;
+import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.MatteBorder;
 import java.awt.*;
+import java.awt.datatransfer.StringSelection;
 
 @Singleton
 public class OsrsMcpPanel extends PluginPanel
 {
-    private final JLabel statusDot  = new JLabel("●");
-    private final JLabel statusText = new JLabel("Starting...");
-    private final JLabel gameState  = new JLabel("Not logged in");
-    private final JLabel urlLabel   = new JLabel();
-    private final JTextArea infoArea = new JTextArea();
+    public enum RelayStatus { OFF, CONNECTING, ACTIVE, ERROR }
+
+    private static final Color SECTION_BG = ColorScheme.DARKER_GRAY_COLOR;
+    private static final Color GREEN      = new Color(0, 180, 90);
+
+    // Status
+    private final JLabel statusDot      = new JLabel("⬤");
+    private final JLabel statusText     = new JLabel("Starting...");
+    private final JLabel gameStateLabel = new JLabel("Not logged in");
+    private final JLabel localUrlLabel  = new JLabel();
+
+    // Relay
+    private final JLabel relayDot       = new JLabel("⬤");
+    private final JLabel relayText      = new JLabel("Disabled");
+    private final JLabel relayUrlLabel  = new JLabel();
+    private final JButton relayUrlCopy  = new JButton("Copy");
+    private final JPanel relayUrlRow    = new JPanel(new BorderLayout(4, 0));
+    private final JPanel relaySection   = new JPanel();
 
     public OsrsMcpPanel()
     {
+        super(false);
         setLayout(new BorderLayout());
-        setBorder(new EmptyBorder(12, 12, 12, 12));
-        setBackground(new Color(40, 40, 40));
+        setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        JPanel root = new JPanel();
+        root.setLayout(new BoxLayout(root, BoxLayout.Y_AXIS));
+        root.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        root.setBorder(new EmptyBorder(8, 8, 8, 8));
+
+        root.add(buildStatusSection());
+        root.add(Box.createVerticalStrut(6));
+        root.add(buildSeparator());
+        root.add(Box.createVerticalStrut(6));
+        root.add(buildSectionHeader("Setup"));
+        root.add(Box.createVerticalStrut(4));
+        root.add(buildSetupSection());
+        root.add(Box.createVerticalStrut(6));
+        root.add(buildSeparator());
+        root.add(Box.createVerticalStrut(6));
+        root.add(buildSectionHeader("Cloud relay"));
+        root.add(Box.createVerticalStrut(4));
+        root.add(buildRelaySection());
+        root.add(Box.createVerticalStrut(6));
+        root.add(buildSeparator());
+        root.add(Box.createVerticalStrut(6));
+        root.add(buildSectionHeader("Available tools"));
+        root.add(Box.createVerticalStrut(4));
+        root.add(buildToolsSection());
+
+        add(root, BorderLayout.NORTH);
+    }
+
+    // ── SECTION BUILDERS ─────────────────────────────────────────────────────
+
+    private JPanel buildStatusSection()
+    {
+        JPanel p = new JPanel();
+        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
+        p.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
         JLabel title = new JLabel("OSRS MCP");
         title.setForeground(Color.WHITE);
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 16f));
-        title.setBorder(new EmptyBorder(0, 0, 12, 0));
+        title.setFont(FontManager.getRunescapeBoldFont());
+        title.setAlignmentX(LEFT_ALIGNMENT);
+        p.add(title);
+        p.add(Box.createVerticalStrut(6));
 
-        JPanel statusRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        statusRow.setOpaque(false);
-        statusDot.setFont(statusDot.getFont().deriveFont(14f));
+        JPanel statusRow = hRow();
+        statusDot.setFont(statusDot.getFont().deriveFont(9f));
         statusDot.setForeground(Color.GRAY);
-        statusText.setForeground(Color.LIGHT_GRAY);
+        statusText.setFont(FontManager.getRunescapeSmallFont());
+        statusText.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         statusRow.add(statusDot);
+        statusRow.add(Box.createHorizontalStrut(4));
         statusRow.add(statusText);
+        p.add(statusRow);
 
-        gameState.setForeground(Color.GRAY);
-        gameState.setFont(gameState.getFont().deriveFont(12f));
-        gameState.setBorder(new EmptyBorder(4, 0, 0, 0));
+        JPanel stateRow = hRow();
+        gameStateLabel.setFont(FontManager.getRunescapeSmallFont());
+        gameStateLabel.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+        stateRow.add(gameStateLabel);
+        p.add(stateRow);
 
-        urlLabel.setForeground(new Color(100, 180, 255));
-        urlLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));
-        urlLabel.setBorder(new EmptyBorder(8, 0, 0, 0));
+        JPanel urlRow = hRow();
+        localUrlLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
+        localUrlLabel.setForeground(ColorScheme.BRAND_ORANGE);
+        urlRow.add(localUrlLabel);
+        p.add(urlRow);
 
-        infoArea.setEditable(false);
-        infoArea.setOpaque(false);
-        infoArea.setForeground(Color.GRAY);
-        infoArea.setFont(infoArea.getFont().deriveFont(11f));
-        infoArea.setLineWrap(true);
-        infoArea.setWrapStyleWord(true);
-        infoArea.setBorder(new EmptyBorder(12, 0, 0, 0));
-        infoArea.setText(
-            "Add to Claude Desktop config:\n\n" +
-            "{\n  \"mcpServers\": {\n    \"osrs\": {\n" +
-            "      \"url\": \"http://127.0.0.1:8282/mcp\",\n" +
-            "      \"transport\": \"streamable-http\"\n    }\n  }\n}"
-        );
-
-        JSeparator sep = new JSeparator();
-        sep.setForeground(new Color(80, 80, 80));
-        sep.setBorder(new EmptyBorder(12, 0, 12, 0));
-
-        JPanel top = new JPanel();
-        top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
-        top.setOpaque(false);
-        top.add(title);
-        top.add(statusRow);
-        top.add(gameState);
-        top.add(urlLabel);
-        top.add(sep);
-        top.add(infoArea);
-        add(top, BorderLayout.NORTH);
+        return p;
     }
+
+    private JPanel buildSetupSection()
+    {
+        JPanel p = box(true);
+        p.add(smallLabel("1. Add to Claude Desktop config:"));
+        p.add(Box.createVerticalStrut(4));
+        p.add(codeBlock(
+            "\"osrs\": {\n" +
+            "  \"command\": \"npx\",\n" +
+            "  \"args\": [\"mcp-remote\",\n" +
+            "    \"http://127.0.0.1:8282/mcp\"]\n" +
+            "}"
+        ));
+        p.add(Box.createVerticalStrut(6));
+        p.add(smallLabel("2. Restart Claude Desktop."));
+        p.add(Box.createVerticalStrut(2));
+        p.add(smallLabel("3. Ask Claude about your stats!"));
+        return p;
+    }
+
+    private JPanel buildRelaySection()
+    {
+        relaySection.setLayout(new BoxLayout(relaySection, BoxLayout.Y_AXIS));
+        relaySection.setBackground(SECTION_BG);
+        relaySection.setAlignmentX(LEFT_ALIGNMENT);
+        relaySection.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        relaySection.setBorder(new CompoundBorder(
+            new MatteBorder(1, 1, 1, 1, ColorScheme.MEDIUM_GRAY_COLOR),
+            new EmptyBorder(6, 8, 6, 8)
+        ));
+
+        JPanel dotRow = hRow();
+        relayDot.setFont(relayDot.getFont().deriveFont(9f));
+        relayDot.setForeground(Color.GRAY);
+        relayText.setFont(FontManager.getRunescapeSmallFont());
+        relayText.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+        dotRow.add(relayDot);
+        dotRow.add(Box.createHorizontalStrut(4));
+        dotRow.add(relayText);
+        dotRow.setAlignmentX(LEFT_ALIGNMENT);
+        relaySection.add(dotRow);
+
+        relayUrlLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
+        relayUrlLabel.setForeground(ColorScheme.BRAND_ORANGE);
+
+        styleButton(relayUrlCopy);
+        relayUrlCopy.addActionListener(e ->
+        {
+            String url = relayUrlLabel.getText();
+            if (url != null && !url.isEmpty())
+                Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new StringSelection(url), null);
+        });
+
+        relayUrlRow.setBackground(SECTION_BG);
+        relayUrlRow.add(relayUrlLabel, BorderLayout.CENTER);
+        relayUrlRow.add(relayUrlCopy, BorderLayout.EAST);
+        relayUrlRow.setAlignmentX(LEFT_ALIGNMENT);
+        relayUrlRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
+        relayUrlRow.setVisible(false);
+        relaySection.add(Box.createVerticalStrut(2));
+        relaySection.add(relayUrlRow);
+
+        relaySection.add(Box.createVerticalStrut(6));
+        relaySection.add(smallLabel("Enable in settings to connect across"));
+        relaySection.add(smallLabel("different networks without extra software."));
+
+        return relaySection;
+    }
+
+    private JPanel buildToolsSection()
+    {
+        JPanel p = box(false);
+        String[][] tools = {
+            {"get_all",          "All data in one call"},
+            {"get_player_stats", "Skill levels & XP"},
+            {"get_equipment",    "Equipped gear by slot"},
+            {"get_inventory",    "Inventory contents"},
+            {"get_location",     "World coords & area"},
+        };
+        for (String[] tool : tools) p.add(buildToolRow(tool[0], tool[1]));
+        return p;
+    }
+
+    // ── COMPONENT HELPERS ────────────────────────────────────────────────────
+
+    private JSeparator buildSeparator()
+    {
+        JSeparator sep = new JSeparator();
+        sep.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+        sep.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+        sep.setAlignmentX(LEFT_ALIGNMENT);
+        return sep;
+    }
+
+    private JLabel buildSectionHeader(String text)
+    {
+        JLabel l = new JLabel(text);
+        l.setFont(FontManager.getRunescapeSmallFont());
+        l.setForeground(ColorScheme.BRAND_ORANGE);
+        l.setAlignmentX(LEFT_ALIGNMENT);
+        return l;
+    }
+
+    private JPanel buildToolRow(String name, String desc)
+    {
+        JPanel row = new JPanel(new BorderLayout(6, 0));
+        row.setBackground(SECTION_BG);
+        row.setBorder(new EmptyBorder(4, 8, 4, 8));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
+        row.setAlignmentX(LEFT_ALIGNMENT);
+        JLabel nameLabel = new JLabel(name);
+        nameLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
+        nameLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        JLabel descLabel = new JLabel(desc);
+        descLabel.setFont(FontManager.getRunescapeSmallFont());
+        descLabel.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+        descLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        row.add(nameLabel, BorderLayout.WEST);
+        row.add(descLabel, BorderLayout.EAST);
+        return row;
+    }
+
+    private JPanel hRow()
+    {
+        JPanel p = new JPanel();
+        p.setLayout(new BoxLayout(p, BoxLayout.X_AXIS));
+        p.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        p.setAlignmentX(LEFT_ALIGNMENT);
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 18));
+        return p;
+    }
+
+    private JPanel box(boolean padded)
+    {
+        JPanel p = new JPanel();
+        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
+        p.setBackground(SECTION_BG);
+        p.setAlignmentX(LEFT_ALIGNMENT);
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        int pad = padded ? 8 : 4;
+        p.setBorder(new CompoundBorder(
+            new MatteBorder(1, 1, 1, 1, ColorScheme.MEDIUM_GRAY_COLOR),
+            new EmptyBorder(pad, padded ? 8 : 0, pad, padded ? 8 : 0)
+        ));
+        return p;
+    }
+
+    private JLabel smallLabel(String text)
+    {
+        JLabel l = new JLabel(text);
+        l.setFont(FontManager.getRunescapeSmallFont());
+        l.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+        l.setAlignmentX(LEFT_ALIGNMENT);
+        return l;
+    }
+
+    private JTextArea codeBlock(String text)
+    {
+        JTextArea area = new JTextArea(text);
+        area.setEditable(false);
+        area.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        area.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
+        area.setLineWrap(false);
+        area.setBorder(new EmptyBorder(2, 2, 2, 2));
+        area.setAlignmentX(LEFT_ALIGNMENT);
+        area.setMaximumSize(new Dimension(Integer.MAX_VALUE, 80));
+        return area;
+    }
+
+    private void styleButton(JButton btn)
+    {
+        btn.setFont(FontManager.getRunescapeSmallFont());
+        btn.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        btn.setBackground(ColorScheme.MEDIUM_GRAY_COLOR);
+        btn.setBorder(new EmptyBorder(2, 6, 2, 6));
+        btn.setFocusPainted(false);
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+    }
+
+    // ── PUBLIC STATE METHODS ─────────────────────────────────────────────────
 
     public void setStatus(boolean running, int port)
     {
         SwingUtilities.invokeLater(() ->
         {
-            if (running)
-            {
-                statusDot.setForeground(new Color(80, 200, 120));
-                statusText.setText("MCP server running");
-                urlLabel.setText("http://127.0.0.1:" + port + "/mcp");
-            }
-            else
-            {
-                statusDot.setForeground(Color.GRAY);
-                statusText.setText("MCP server stopped");
-                urlLabel.setText("");
-            }
+            statusDot.setForeground(running ? GREEN : Color.GRAY);
+            statusText.setText(running ? "MCP server running" : "MCP server stopped");
+            localUrlLabel.setText(running ? "http://127.0.0.1:" + port + "/mcp" : "");
         });
     }
 
@@ -97,10 +306,42 @@ public class OsrsMcpPanel extends PluginPanel
     {
         SwingUtilities.invokeLater(() ->
         {
-            statusDot.setForeground(new Color(220, 80, 80));
-            statusText.setText("Error");
-            urlLabel.setForeground(new Color(220, 80, 80));
-            urlLabel.setText(message);
+            statusDot.setForeground(ColorScheme.PROGRESS_ERROR_COLOR);
+            statusText.setText("Error: " + message);
+        });
+    }
+
+    public void setRelayStatus(RelayStatus status, String url)
+    {
+        SwingUtilities.invokeLater(() ->
+        {
+            switch (status)
+            {
+                case OFF:
+                    relayDot.setForeground(Color.GRAY);
+                    relayText.setText("Disabled");
+                    relayUrlRow.setVisible(false);
+                    break;
+                case CONNECTING:
+                    relayDot.setForeground(ColorScheme.BRAND_ORANGE);
+                    relayText.setText("Connecting...");
+                    relayUrlRow.setVisible(false);
+                    break;
+                case ACTIVE:
+                    relayDot.setForeground(GREEN);
+                    relayText.setText("Active");
+                    relayUrlLabel.setText(url);
+                    relayUrlRow.setVisible(true);
+                    break;
+                case ERROR:
+                    relayDot.setForeground(ColorScheme.PROGRESS_ERROR_COLOR);
+                    relayText.setText("Failed");
+                    relayUrlLabel.setText(url != null ? url : "");
+                    relayUrlRow.setVisible(url != null && !url.isEmpty());
+                    break;
+            }
+            relaySection.revalidate();
+            relaySection.repaint();
         });
     }
 
@@ -111,16 +352,20 @@ public class OsrsMcpPanel extends PluginPanel
             switch (state)
             {
                 case LOGGED_IN:
-                    gameState.setForeground(new Color(80, 200, 120));
-                    gameState.setText("Logged in");
+                    gameStateLabel.setForeground(GREEN);
+                    gameStateLabel.setText("Logged in");
                     break;
                 case LOGIN_SCREEN:
-                    gameState.setForeground(Color.GRAY);
-                    gameState.setText("Login screen");
+                    gameStateLabel.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+                    gameStateLabel.setText("Login screen");
+                    break;
+                case LOADING:
+                    gameStateLabel.setForeground(ColorScheme.BRAND_ORANGE);
+                    gameStateLabel.setText("Loading...");
                     break;
                 default:
-                    gameState.setForeground(Color.GRAY);
-                    gameState.setText(state.name());
+                    gameStateLabel.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
+                    gameStateLabel.setText(state.name().toLowerCase());
             }
         });
     }

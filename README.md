@@ -11,8 +11,6 @@ Ask your AI assistant things like:
 - *"Is my current setup good for my Slayer task?"*
 - *"What's the fastest way to get from 70 to 80 Slayer?"*
 
-The assistant can see your actual in-game data when answering, so advice is specific to your character rather than generic.
-
 ## Available tools
 
 | Tool | Description |
@@ -25,17 +23,19 @@ The assistant can see your actual in-game data when answering, so advice is spec
 
 ---
 
-## Setup
+## Connection modes
 
-The plugin starts a local MCP server at `http://127.0.0.1:8282/mcp` when RuneLite is running. You then connect your AI tool of choice to that address.
+The plugin supports three connection modes depending on your setup. Start with the simplest one that fits your situation.
 
-### Claude Desktop (recommended)
+### Mode 1 — Local (same machine)
+
+The default. RuneLite and your AI tool are on the same machine. No extra configuration needed.
 
 1. Download [Claude Desktop](https://claude.ai/download)
 2. Open the config file:
    - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
    - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-3. Add the following:
+3. Add:
 
 ```json
 {
@@ -48,94 +48,95 @@ The plugin starts a local MCP server at `http://127.0.0.1:8282/mcp` when RuneLit
 }
 ```
 
-4. Restart Claude Desktop. The OSRS tools will appear automatically.
+4. Restart Claude Desktop.
 
 ---
 
-### Cursor
+### Mode 2 — LAN (same network, different devices)
 
-1. Open **Settings → MCP**
-2. Add a new server with type `streamable-http` and URL `http://127.0.0.1:8282/mcp`
-3. Or add directly to `~/.cursor/mcp.json`:
+Use this when RuneLite is on one device and your AI tool is on another, and both are on the **same router/subnet** (e.g. both on the same WiFi, or both on Ethernet from the same router).
 
-```json
-{
-  "mcpServers": {
-    "osrs": {
-      "url": "http://127.0.0.1:8282/mcp"
-    }
-  }
-}
-```
-
----
-
-### Windsurf
-
-Add to your Windsurf MCP config (`~/.codeium/windsurf/mcp_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "osrs": {
-      "serverUrl": "http://127.0.0.1:8282/mcp"
-    }
-  }
-}
-```
-
----
-
-### Any other MCP-compatible tool
-
-If your AI tool supports MCP with a streamable HTTP transport, point it at:
-
-```
-http://127.0.0.1:8282/mcp
-```
-
-If it only supports stdio transport (not HTTP directly), use the `mcp-remote` bridge:
-
-```bash
-npx mcp-remote http://127.0.0.1:8282/mcp
-```
-
----
-
-## LAN / cross-device setup
-
-To use Claude on a laptop while RuneLite runs on a desktop (same network):
-
-1. Enable **Allow LAN connections** in the plugin settings
-2. Set an **Auth Token** in the plugin settings (e.g. `my-secret-token`)
-3. Find your PC's local IP address (e.g. `192.168.0.10`)
-4. On the other device, point your MCP client at `http://192.168.0.10:8282/mcp` with the auth token as a Bearer header
-
-Example for Claude Desktop:
+1. In the plugin settings, enable **Allow LAN connections**, then disable and re-enable the plugin to restart the server
+2. Find the local IP of the machine running RuneLite:
+   - **macOS:** `ipconfig getifaddr en0` in Terminal
+   - **Windows:** `ipconfig` in Command Prompt, look for IPv4 Address
+3. On the other device, point your config at that IP:
 
 ```json
 {
   "mcpServers": {
     "osrs": {
       "command": "npx",
-      "args": [
-        "mcp-remote",
-        "http://192.168.0.10:8282/mcp",
-        "--header",
-        "Authorization: Bearer my-secret-token"
-      ]
+      "args": ["mcp-remote", "http://192.168.x.x:8282/mcp", "--allow-http"]
     }
   }
 }
 ```
 
+> **Note:** The `--allow-http` flag is required by `mcp-remote` for non-localhost HTTP URLs.
+
+> **Tip:** Set an Auth Token in the plugin settings when using LAN mode.
+
+#### Troubleshooting: devices can't reach each other
+
+If the connection times out even with LAN mode enabled, your devices are likely on **different subnets**. This commonly happens when one device is on Ethernet and another is on WiFi going through a different router or access point. Check both IPs — if they're on different ranges (e.g. `192.168.0.x` vs `192.168.68.x`) they cannot communicate directly. Use Mode 3 instead.
+
+---
+
+### Mode 3 — Cloud Relay (different networks, no extra software)
+
+Use this when your devices are on different networks or subnets, and you don't want to install extra software like Tailscale or ngrok.
+
+The plugin uses **SSH reverse tunnelling** — SSH is built into macOS and Windows 10/11, so nothing extra needs to be installed. It creates a temporary public HTTPS URL that routes traffic through to your local MCP server.
+
+1. In the plugin settings, enable **Cloud relay**
+2. The plugin panel will show a URL like `https://abc123.serveo.net/mcp` once connected
+3. Use that URL in your config on any device (no `--allow-http` needed — it's HTTPS):
+
+```json
+{
+  "mcpServers": {
+    "osrs": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://abc123.serveo.net/mcp"]
+    }
+  }
+}
+```
+
+The panel also has a **Copy** button so you don't have to type the URL manually.
+
+**How it works:** The plugin runs `ssh -R 80:localhost:8282 serveo.net` as a background process. Serveo is a free public SSH relay service. If Serveo is unavailable, it automatically falls back to `localhost.run`, which works identically. Both are free and require no account.
+
+> **Note:** The relay URL changes every time the plugin restarts. Update your config when it does.
+
+> **Tip:** Set an Auth Token in the plugin settings for extra security when using cloud relay.
+
+---
+
+### Other AI tools
+
+The plugin works with any MCP-compatible tool, not just Claude Desktop.
+
+**Cursor** — add to `~/.cursor/mcp.json`:
+```json
+{ "mcpServers": { "osrs": { "url": "http://127.0.0.1:8282/mcp" } } }
+```
+
+**Windsurf** — add to `~/.codeium/windsurf/mcp_config.json`:
+```json
+{ "mcpServers": { "osrs": { "serverUrl": "http://127.0.0.1:8282/mcp" } } }
+```
+
+**Any other tool** — point it at `http://127.0.0.1:8282/mcp` using streamable HTTP transport, or use `npx mcp-remote http://127.0.0.1:8282/mcp` as a stdio bridge.
+
 ---
 
 ## Privacy
 
-- The server only binds to `127.0.0.1` (localhost) by default — never exposed to the internet
+- The server only binds to `127.0.0.1` (localhost) by default
 - Per-toggle controls for stats, equipment, inventory, location and username in plugin settings
-- Optional auth token for shared or LAN setups
+- Optional auth token for LAN and relay setups
 - Read-only — the plugin never sends commands to the game
 
 ## Configuration
@@ -143,8 +144,9 @@ Example for Claude Desktop:
 | Setting | Default | Description |
 |---------|---------|-------------|
 | Port | 8282 | Port the MCP server listens on |
-| Allow LAN connections | Off | Bind to all interfaces for cross-device use |
-| Auth Token | (empty) | Optional Bearer token for authentication |
+| Allow LAN connections | Off | Mode 2: bind to all interfaces |
+| Cloud relay | Off | Mode 3: public HTTPS tunnel via SSH |
+| Auth Token | (empty) | Optional Bearer token |
 | Share skill levels | On | Allow the AI to read your skills |
 | Share equipment | On | Allow the AI to see equipped gear |
 | Share inventory | On | Allow the AI to see inventory |
