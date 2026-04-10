@@ -22,11 +22,12 @@ public class RelayService
         "nokey@localhost.run"
     };
 
-    // Broad pattern: matches any https:// URL in relay output.
-    // Serveo now uses *.serveousercontent.com; localhost.run uses *.lhr.life.
-    // Using a general pattern future-proofs both.
     private static final Pattern URL_PATTERN =
         Pattern.compile("https://[a-zA-Z0-9][a-zA-Z0-9.\\-]+");
+
+    // Serveo registration URL pattern (contains /ssh/keys?add=)
+    private static final Pattern REGISTER_PATTERN =
+        Pattern.compile("https://console\\.serveo\\.net/ssh/keys\\?add=[A-Za-z0-9%:+/=]+");
 
     @Inject private OsrsMcpConfig config;
 
@@ -34,16 +35,21 @@ public class RelayService
     private ExecutorService executor;
     private volatile String relayUrl;
     private volatile boolean running;
-    private Consumer<String> onUrlAssigned;
-    private Consumer<String> onError;
+    private Consumer<String>   onUrlAssigned;
+    private Consumer<String>   onError;
+    private Consumer<String>   onRegistrationRequired;
     private int relayIndex = 0;
 
-    public void start(int port, Consumer<String> onUrlAssigned, Consumer<String> onError)
+    public void start(int port,
+                      Consumer<String> onUrlAssigned,
+                      Consumer<String> onError,
+                      Consumer<String> onRegistrationRequired)
     {
-        this.onUrlAssigned = onUrlAssigned;
-        this.onError = onError;
-        this.relayIndex = 0;
-        this.running = true;
+        this.onUrlAssigned            = onUrlAssigned;
+        this.onError                  = onError;
+        this.onRegistrationRequired   = onRegistrationRequired;
+        this.relayIndex               = 0;
+        this.running                  = true;
         tryRelay(port);
     }
 
@@ -65,7 +71,6 @@ public class RelayService
             t.setDaemon(true);
             return t;
         });
-
         executor.submit(() -> spawnTunnel(port, host));
     }
 
@@ -73,17 +78,11 @@ public class RelayService
     {
         try
         {
-            // Build the -R argument.
-            // With subdomain: "myname:80:localhost:8282" → https://myname.serveo.net
-            // Without:        "80:localhost:8282"        → random URL
-            String subdomain = config.relaySubdomain().trim();
+            String subdomain    = config.relaySubdomain().trim();
             boolean hasSubdomain = !subdomain.isEmpty() && host.equals("serveo.net");
-            String forwardArg = hasSubdomain
+            String forwardArg   = hasSubdomain
                 ? subdomain + ":80:localhost:" + port
                 : "80:localhost:" + port;
-
-            if (hasSubdomain)
-                log.info("OSRS MCP: Requesting stable subdomain: {}", subdomain);
 
             ProcessBuilder pb = new ProcessBuilder(
                 "ssh",
@@ -104,23 +103,27 @@ public class RelayService
                 log.debug("OSRS MCP relay: {}", line);
                 String clean = line.replaceAll("\\x1B\\[[0-9;]*m", "");
 
-                // If subdomain was requested but taken, serveo prints an error
-                if (hasSubdomain && clean.toLowerCase().contains("already in use"))
+                // Serveo registration required for custom subdomains
+                Matcher regMatcher = REGISTER_PATTERN.matcher(clean);
+                if (regMatcher.find() && onRegistrationRequired != null)
                 {
-                    log.warn("OSRS MCP: Subdomain '{}' is already taken, falling back to random URL", subdomain);
-                    if (onError != null)
-                        onError.accept("Subdomain '" + subdomain + "' is taken. Clear it in settings to use a random URL.");
-                    process.destroy();
-                    return;
+                    log.warn("OSRS MCP: Serveo subdomain requires SSH key registration");
+                    onRegistrationRequired.accept(regMatcher.group());
                 }
 
-                Matcher m = URL_PATTERN.matcher(clean);
-                if (m.find())
+                // Relay URL assigned
+                Matcher urlMatcher = URL_PATTERN.matcher(clean);
+                if (urlMatcher.find())
                 {
-                    relayUrl = m.group() + "/mcp";
-                    log.info("OSRS MCP: Relay URL assigned: {}", relayUrl);
-                    if (onUrlAssigned != null)
-                        onUrlAssigned.accept(relayUrl);
+                    String found = urlMatcher.group();
+                    // Skip the registration console URL
+                    if (!found.contains("console.serveo.net"))
+                    {
+                        relayUrl = found + "/mcp";
+                        log.info("OSRS MCP: Relay URL assigned: {}", relayUrl);
+                        if (onUrlAssigned != null)
+                            onUrlAssigned.accept(relayUrl);
+                    }
                 }
             }
 

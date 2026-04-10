@@ -132,7 +132,9 @@ By default, serveo assigns a random URL each time the tunnel starts, which means
 }
 ```
 
-> **Note:** The subdomain must be unique on serveo.net. If someone else has already claimed it, the plugin will show an error and prompt you to choose a different name. Use something specific to you — your username plus a suffix works well.
+> **Note:** Serveo requires a one-time SSH key registration before custom subdomains work. If you haven't registered, the plugin will detect this and show a **Register** button in the panel -- click it, sign in with Google or GitHub, then click **Restart server**. After that your subdomain works permanently.
+
+> **Note:** The subdomain must be unique on serveo.net. Use something specific to you -- your username plus a suffix works well (e.g. `nick-osrs-mcp`).
 
 > **Note:** The subdomain only works with serveo.net, not the localhost.run fallback. If serveo is unavailable, the plugin falls back to a random localhost.run URL automatically.
 

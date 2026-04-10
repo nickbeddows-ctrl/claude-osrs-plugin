@@ -1,5 +1,6 @@
 package com.osrsmcp;
 
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
@@ -13,10 +14,11 @@ import javax.swing.border.MatteBorder;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 
+@Slf4j
 @Singleton
 public class OsrsMcpPanel extends PluginPanel
 {
-    public enum RelayStatus { OFF, CONNECTING, ACTIVE, ERROR }
+    public enum RelayStatus { OFF, CONNECTING, ACTIVE, ERROR, NEEDS_REGISTRATION }
 
     private static final Color SECTION_BG = ColorScheme.DARKER_GRAY_COLOR;
     private static final Color GREEN      = new Color(0, 180, 90);
@@ -44,6 +46,8 @@ public class OsrsMcpPanel extends PluginPanel
     private final JPanel  relayUrlRow   = new JPanel(new BorderLayout(4, 0));
     private final JPanel  relaySection  = new JPanel();
     private String        fullRelayUrl  = null;
+    private final JLabel  regLabel      = new JLabel();
+    private final JPanel  regRow        = new JPanel(new BorderLayout(4, 0));
 
     private Runnable restartCallback;
 
@@ -227,6 +231,25 @@ public class OsrsMcpPanel extends PluginPanel
         relayUrlRow.setVisible(false);
         relaySection.add(Box.createVerticalStrut(2));
         relaySection.add(relayUrlRow);
+
+        // Registration required row
+        regLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 9));
+        regLabel.setForeground(ColorScheme.BRAND_ORANGE);
+        JButton openRegBtn = new JButton("Register");
+        styleButton(openRegBtn);
+        openRegBtn.addActionListener(e -> {
+            try { java.awt.Desktop.getDesktop().browse(new java.net.URI(regLabel.getToolTipText())); }
+            catch (Exception ex) { log.warn("Could not open browser", ex); }
+        });
+        regRow.setBackground(SECTION_BG);
+        regRow.add(regLabel, BorderLayout.CENTER);
+        regRow.add(openRegBtn, BorderLayout.EAST);
+        regRow.setAlignmentX(LEFT_ALIGNMENT);
+        regRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
+        regRow.setVisible(false);
+        relaySection.add(Box.createVerticalStrut(2));
+        relaySection.add(regRow);
+
         relaySection.add(Box.createVerticalStrut(6));
         relaySection.add(smallLabel("Set mode to \"Cloud relay\" in settings"));
         relaySection.add(smallLabel("to connect across different networks."));
@@ -428,12 +451,14 @@ public class OsrsMcpPanel extends PluginPanel
                     relayText.setText("Disabled");
                     relayUrlRow.setVisible(false);
                     fullRelayUrl = null;
+                    regRow.setVisible(false);
                     break;
                 case CONNECTING:
                     relayDot.setForeground(ColorScheme.BRAND_ORANGE);
                     relayText.setText("Connecting...");
                     relayUrlRow.setVisible(false);
                     fullRelayUrl = null;
+                    regRow.setVisible(false);
                     break;
                 case ACTIVE:
                     relayDot.setForeground(GREEN);
@@ -446,6 +471,7 @@ public class OsrsMcpPanel extends PluginPanel
                     relayUrlLabel.setToolTipText(url);
                     relayUrlRow.setToolTipText(url);
                     relayUrlRow.setVisible(true);
+                    regRow.setVisible(false);
                     // Update setup block with real relay URL
                     refreshSetupBlock();
                     break;
@@ -455,6 +481,14 @@ public class OsrsMcpPanel extends PluginPanel
                     fullRelayUrl = null;
                     relayUrlLabel.setText(url != null ? url : "");
                     relayUrlRow.setVisible(url != null && !url.isEmpty());
+                    regRow.setVisible(false);
+                    break;
+                case NEEDS_REGISTRATION:
+                    relayDot.setForeground(ColorScheme.BRAND_ORANGE);
+                    relayText.setText("Register to use subdomain");
+                    regLabel.setText("Click Register, then restart server");
+                    regLabel.setToolTipText(url);
+                    regRow.setVisible(true);
                     break;
             }
             relaySection.revalidate();

@@ -82,8 +82,9 @@ public class OsrsMcpPlugin extends Plugin
             panel.setRelayStatus(OsrsMcpPanel.RelayStatus.CONNECTING, null);
             relayService.start(
                 config.port(),
-                url -> panel.setRelayStatus(OsrsMcpPanel.RelayStatus.ACTIVE, url),
-                err -> panel.setRelayStatus(OsrsMcpPanel.RelayStatus.ERROR, err)
+                url  -> panel.setRelayStatus(OsrsMcpPanel.RelayStatus.ACTIVE, url),
+                err  -> panel.setRelayStatus(OsrsMcpPanel.RelayStatus.ERROR, err),
+                regUrl -> panel.setRelayStatus(OsrsMcpPanel.RelayStatus.NEEDS_REGISTRATION, regUrl)
             );
         }
     }
