@@ -54,11 +54,13 @@ public class OsrsMcpPanel extends PluginPanel
     private final JLabel step1Label = new JLabel();
     private final JLabel step2Label = new JLabel();
     private final JLabel step3Label = new JLabel();
+    private final JLabel step4Label = new JLabel();
 
     // Step buttons
-    private final JButton genKeyBtn    = new JButton("Generate key");
-    private final JButton copyKeyBtn   = new JButton("Copy public key");
-    private final JButton openRegBtn   = new JButton("Copy register URL");
+    private final JButton genKeyBtn      = new JButton("Generate key");
+    private final JButton copyKeyBtn     = new JButton("Copy public key");
+    private final JButton openRegBtn     = new JButton("Copy register URL");
+    private final JButton openDomainBtn  = new JButton("Copy domain URL");
 
     // Callbacks
     private Runnable         restartCallback;
@@ -249,7 +251,9 @@ public class OsrsMcpPanel extends PluginPanel
         outer.add(Box.createVerticalStrut(4));
         outer.add(buildStep("2", step2Label, buildStep2Buttons()));
         outer.add(Box.createVerticalStrut(4));
-        outer.add(buildStep("3", step3Label, null));
+        outer.add(buildStep("3", step3Label, buildStep3Buttons()));
+        outer.add(Box.createVerticalStrut(4));
+        outer.add(buildStep("4", step4Label, null));
 
         return outer;
     }
@@ -265,14 +269,19 @@ public class OsrsMcpPanel extends PluginPanel
         JPanel row = new JPanel(new BorderLayout(6, 0));
         row.setBackground(SECTION_BG);
         row.setAlignmentX(LEFT_ALIGNMENT);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 
         JLabel num = new JLabel(number + ".");
         num.setFont(FontManager.getRunescapeSmallFont());
         num.setForeground(STEP_TODO);
-        num.setPreferredSize(new Dimension(14, 14));
+        num.setPreferredSize(new Dimension(14, 20));
+        num.setVerticalAlignment(SwingConstants.TOP);
 
+        // Use HTML to allow word wrap; actual color set via setForeground doesn't work with HTML
+        // so we store the label text without HTML wrapper and add it in refreshSteps
         label.setFont(FontManager.getRunescapeSmallFont());
         label.setForeground(STEP_TODO);
+        label.setVerticalAlignment(SwingConstants.TOP);
 
         row.add(num, BorderLayout.WEST);
         row.add(label, BorderLayout.CENTER);
@@ -338,6 +347,22 @@ public class OsrsMcpPanel extends PluginPanel
         return p;
     }
 
+    private JPanel buildStep3Buttons()
+    {
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        p.setBackground(SECTION_BG);
+        p.setAlignmentX(LEFT_ALIGNMENT);
+        styleButton(openDomainBtn);
+        openDomainBtn.setToolTipText("Opens console.serveo.net/domains — click Add Domain and enter your subdomain");
+        openDomainBtn.addActionListener(e -> {
+            Toolkit.getDefaultToolkit().getSystemClipboard()
+                .setContents(new StringSelection("https://console.serveo.net/domains"), null);
+            flash(openDomainBtn, "URL copied!", "Copy domain URL");
+        });
+        p.add(openDomainBtn);
+        return p;
+    }
+
     private JPanel buildToolsSection()
     {
         JPanel p = box(false);
@@ -365,29 +390,38 @@ public class OsrsMcpPanel extends PluginPanel
             // Step 1 — SSH key
             if (hasKey)
             {
-                step1Label.setText("SSH key ready");
+                step1Label.setText("<html>SSH key ready</html>");
                 step1Label.setForeground(STEP_DONE);
                 genKeyBtn.setText("Regenerate key");
                 copyKeyBtn.setEnabled(true);
             }
             else
             {
-                step1Label.setText("Generate an SSH key for this plugin");
+                step1Label.setText("<html>Generate a dedicated SSH key for this plugin</html>");
                 step1Label.setForeground(STEP_ACTIVE);
                 genKeyBtn.setText("Generate key");
                 copyKeyBtn.setEnabled(false);
             }
 
-            // Step 2 — Register
+            // Step 2 — Register SSH key on serveo
             step2Label.setText(hasKey
-                ? "Copy register URL → open in browser → sign in"
-                : "Complete step 1 first");
+                ? "<html>Copy the register URL and open it in your browser. Sign in with Google or GitHub to register your SSH key with serveo.</html>"
+                : "<html>Complete step 1 first</html>");
             step2Label.setForeground(hasKey ? STEP_ACTIVE : STEP_TODO);
             openRegBtn.setEnabled(hasKey);
 
-            // Step 3 — Subdomain
-            step3Label.setText("Set Stable subdomain in plugin settings, then Restart server");
-            step3Label.setForeground(active ? STEP_DONE : (hasKey ? STEP_ACTIVE : STEP_TODO));
+            // Step 3 — Add domain on serveo
+            step3Label.setText(hasKey
+                ? "<html>Copy the domain URL and open it in your browser. Click Add Domain and enter your chosen subdomain (e.g. yourname-osrs-mcp).</html>"
+                : "<html>Complete steps 1 and 2 first</html>");
+            step3Label.setForeground(hasKey ? STEP_ACTIVE : STEP_TODO);
+            openDomainBtn.setEnabled(hasKey);
+
+            // Step 4 — Set subdomain in settings
+            step4Label.setText(active
+                ? "<html>Stable URL active!</html>"
+                : "<html>Set your subdomain under Cloud Relay in plugin settings, then click Restart server.</html>");
+            step4Label.setForeground(active ? STEP_DONE : (hasKey ? STEP_ACTIVE : STEP_TODO));
         });
     }
 
