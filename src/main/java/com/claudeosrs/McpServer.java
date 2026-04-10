@@ -1,6 +1,11 @@
 package com.claudeosrs;
 
-import com.google.gson.*;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonSyntaxException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +32,7 @@ public class McpServer
     @Inject private ClaudeOsrsConfig config;
 
     private HttpServer server;
-    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    @Inject private Gson gson;
     private final Set<SseClient> sseClients = ConcurrentHashMap.newKeySet();
 
     public void start(int port) throws IOException
