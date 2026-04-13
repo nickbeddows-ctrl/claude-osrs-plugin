@@ -47,6 +47,7 @@ public class PlayerDataService
     @Inject private PluginManager pluginManager;
     @Inject private okhttp3.OkHttpClient httpClient;
     @Inject private EquipmentStatsService equipmentStatsService;
+    @Inject private DropTableService dropTableService;
     @Inject private ConfigManager configManager;
     @Inject private WikiPriceService wikiPriceService;
 
@@ -622,7 +623,12 @@ public class PlayerDataService
         return result;
     }
 
-        // ── COMBAT CONTEXT (Phase 11) ─────────────────────────────────────────────
+        public Map<String, Object> buildDropTable(String npcName)
+    {
+        return dropTableService.getDropTable(npcName);
+    }
+
+    // ── COMBAT CONTEXT (Phase 11) ─────────────────────────────────────────────
 
     public Map<String, Object> buildCombatContext()
     {
