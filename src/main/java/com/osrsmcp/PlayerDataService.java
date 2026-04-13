@@ -3,6 +3,7 @@ package com.osrsmcp;
 import net.runelite.api.*;
 import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
+import net.runelite.api.Prayer;
 import net.runelite.api.Varbits;
 import net.runelite.api.VarPlayer;
 import net.runelite.client.plugins.Plugin;
@@ -54,12 +55,14 @@ public class PlayerDataService
         if (config.shareLocation())  data.put("location",  buildLocation());
         data.put("quests",  buildQuestStates());
         data.put("diaries", buildDiaryStates());
+        data.put("prayers",       buildPrayers());
         data.put("bank",          buildBankValue());
         data.put("collection_log", buildCollectionLog());
         data.put("plugins", buildInstalledPlugins());
         data.put("slayer",  buildSlayerTask());
         data.put("clue",    buildClueScroll());
         data.put("ge",      buildGeOffers());
+        data.put("prayers",       buildPrayers());
         data.put("bank",          buildBankValue());
         data.put("collection_log", buildCollectionLog());
         data.put("plugins", buildInstalledPlugins());
@@ -438,6 +441,60 @@ public class PlayerDataService
         cat.put("obtained", obtained);
         cat.put("total",    max);
         map.put(name, cat);
+    }
+
+        public Map<String, Object> buildPrayers()
+    {
+        if (!isLoggedIn()) return errorMap("Player is not logged in");
+
+        // Active prayers (currently toggled on)
+        List<String> active = new ArrayList<>();
+        for (Prayer prayer : Prayer.values())
+        {
+            if (client.getVarbitValue(prayer.getVarbit()) == 1)
+                active.add(formatPrayerName(prayer.name()));
+        }
+
+        // Unlock status for prayers that require specific unlocks beyond Prayer level
+        Map<String, Object> unlocks = new LinkedHashMap<>();
+        unlocks.put("preserve", client.getVarbitValue(VarbitID.PRAYER_PRESERVE_UNLOCKED) == 1);
+        unlocks.put("rigour",   client.getVarbitValue(VarbitID.PRAYER_RIGOUR_UNLOCKED)   == 1);
+        unlocks.put("augury",   client.getVarbitValue(VarbitID.PRAYER_AUGURY_UNLOCKED)   == 1);
+        // Chivalry and Piety unlock via King's Ransom + Knight Waves Training Grounds
+        boolean kingsRansomDone = Quest.KINGS_RANSOM.getState(client) == QuestState.FINISHED;
+        unlocks.put("chivalry_and_piety_quest_done", kingsRansomDone);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("active_prayers", active);
+        result.put("special_unlocks", unlocks);
+        return result;
+    }
+
+    private String formatPrayerName(String enumName)
+    {
+        // Convert THICK_SKIN -> Thick Skin, RP_REJUVENATION -> Ruinous Powers: Rejuvenation
+        if (enumName.startsWith("RP_"))
+        {
+            String rest = enumName.substring(3).replace("_", " ");
+            return "Ruinous Powers: " + capitalise(rest);
+        }
+        return capitalise(enumName.replace("_", " "));
+    }
+
+    private String capitalise(String s)
+    {
+        if (s == null || s.isEmpty()) return s;
+        StringBuilder sb = new StringBuilder();
+        for (String word : s.split(" "))
+        {
+            if (!word.isEmpty())
+            {
+                sb.append(Character.toUpperCase(word.charAt(0)));
+                sb.append(word.substring(1).toLowerCase());
+                sb.append(" ");
+            }
+        }
+        return sb.toString().trim();
     }
 
         private static final int[] XP_TABLE = {
