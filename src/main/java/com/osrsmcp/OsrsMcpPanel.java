@@ -496,18 +496,20 @@ public class OsrsMcpPanel extends PluginPanel
 
     private void refreshSections()
     {
-        SwingUtilities.invokeLater(() ->
-        {
-            boolean isRelay     = currentMode == ConnectionMode.CLOUD_RELAY;
-            boolean isTailscale = currentMode == ConnectionMode.TAILSCALE;
+        // Already on EDT when called from setServerRunning's invokeLater
+        boolean isRelay     = currentMode == ConnectionMode.CLOUD_RELAY;
+        boolean isTailscale = currentMode == ConnectionMode.TAILSCALE;
 
-            if (relayHeaderRef != null)    relayHeaderRef.setVisible(isRelay);
-            if (relayPanelRef != null)     relayPanelRef.setVisible(isRelay);
-            if (tailscaleHeaderRef != null) tailscaleHeaderRef.setVisible(isTailscale);
-            if (tailscalePanelRef != null)  tailscalePanelRef.setVisible(isTailscale);
+        if (relayHeaderRef != null)     relayHeaderRef.setVisible(isRelay);
+        if (relayPanelRef != null)      relayPanelRef.setVisible(isRelay);
+        if (tailscaleHeaderRef != null) tailscaleHeaderRef.setVisible(isTailscale);
+        if (tailscalePanelRef != null)  tailscalePanelRef.setVisible(isTailscale);
 
-            refreshTailscaleSteps();
-        });
+        refreshTailscaleSteps();
+
+        // Tell the parent to recalculate layout after visibility changes
+        revalidate();
+        repaint();
     }
 
     private void refreshTailscaleSteps()

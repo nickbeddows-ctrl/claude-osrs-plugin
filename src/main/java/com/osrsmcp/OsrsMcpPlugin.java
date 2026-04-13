@@ -6,6 +6,7 @@ import net.runelite.api.Client;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
@@ -119,6 +120,21 @@ public class OsrsMcpPlugin extends Plugin
     public void onGameStateChanged(GameStateChanged event)
     {
         panel.updateGameState(event.getGameState());
+    }
+
+    @Subscribe
+    public void onConfigChanged(ConfigChanged event)
+    {
+        if (!event.getGroup().equals("osrsmcp")) return;
+        if (!event.getKey().equals("connectionMode")) return;
+
+        // Refresh panel sections immediately when mode changes in settings
+        String lanIp = null;
+        if (config.connectionMode() == ConnectionMode.LAN)
+            lanIp = getLanIp();
+        else if (config.connectionMode() == ConnectionMode.TAILSCALE)
+            lanIp = tailscaleService.getTailscaleIp();
+        panel.setServerRunning(mcpServer != null, config.port(), config.connectionMode(), lanIp);
     }
 
     @Provides
