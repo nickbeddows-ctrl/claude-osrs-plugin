@@ -1,5 +1,7 @@
 package com.osrsmcp;
 
+import lombok.extern.slf4j.Slf4j;
+
 import net.runelite.api.*;
 import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
@@ -36,12 +38,14 @@ import javax.inject.Singleton;
 import java.util.*;
 
 @Singleton
+@Slf4j
 public class PlayerDataService
 {
     @Inject private Client client;
     @Inject private ItemManager itemManager;
     @Inject private OsrsMcpConfig config;
     @Inject private PluginManager pluginManager;
+    @Inject private okhttp3.OkHttpClient httpClient;
     @Inject private ConfigManager configManager;
     @Inject private WikiPriceService wikiPriceService;
 
@@ -668,6 +672,14 @@ public class PlayerDataService
             if (hr >= 0 && hs > 0) t.put("health_percent", Math.round(hr * 100.0 / hs));
             result.put("current_target", t);
         }
+        else
+        {
+            result.put("current_target", null);
+            // Fall back to slayer task if no active target
+            int slayerRemaining = client.getVarpValue(VarPlayerID.SLAYER_COUNT);
+            if (slayerRemaining > 0)
+                result.put("slayer_task_context", buildSlayerTask());
+        }
 
         return result;
     }
@@ -742,6 +754,95 @@ public class PlayerDataService
         result.put("note", "Profile KCs require ChatCommands plugin to be active and bosses killed while it was enabled.");
 
         return result;
+    }
+
+        public Map<String, Object> buildNpcInfo(String npcName)
+    {
+        if (npcName == null || npcName.trim().isEmpty())
+            return errorMap("No NPC name provided");
+
+        // Capitalise first letter of each word for Wiki page title
+        String[] words = npcName.trim().split("\\\\s+");
+        StringBuilder title = new StringBuilder();
+        for (String w : words)
+        {
+            if (!w.isEmpty())
+                title.append(Character.toUpperCase(w.charAt(0)))
+                     .append(w.substring(1).toLowerCase()).append(" ");
+        }
+        String pageTitle = title.toString().trim().replace(" ", "_");
+
+        try
+        {
+            String url = "https://oldschool.runescape.wiki/w/Special:Export/" + pageTitle;
+            okhttp3.Request req = new okhttp3.Request.Builder()
+                .url(url)
+                .header("User-Agent", "osrs-mcp-plugin/1.0")
+                .build();
+            String body;
+            try (okhttp3.Response resp = httpClient.newCall(req).execute())
+            {
+                if (!resp.isSuccessful()) return errorMap("Wiki page not found for: " + npcName);
+                body = resp.body().string();
+            }
+
+            // Extract wiki text from XML
+            int textStart = body.indexOf("<text");
+            int textEnd   = body.indexOf("</text>");
+            if (textStart < 0 || textEnd < 0) return errorMap("Could not parse Wiki page for: " + npcName);
+            int contentStart = body.indexOf(">", textStart) + 1;
+            String wikiText = body.substring(contentStart, textEnd);
+
+            // Parse infobox fields: |key = value or |key1 = value
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("name", npcName);
+
+            String[] fields = {
+                "combat", "hitpoints", "slaylvl", "slayxp", "max_hit",
+                "attack_speed", "aggressive", "poisonous",
+                "immunepoison", "immunevenom", "immunecannon", "immunethrall",
+                "dstab", "dslash", "dcrush", "dmagic", "drange",
+                "astab", "aslash", "acrush", "amagic", "arange",
+                "elementalweaknesstype", "elementalweaknesspercent"
+            };
+
+            for (String field : fields)
+            {
+                // Try exact field, then field with suffix 1
+                String val = extractWikiField(wikiText, field);
+                if (val == null) val = extractWikiField(wikiText, field + "1");
+                if (val != null && !val.isEmpty() && !val.equals("N/A") && !val.equals("?"))
+                    result.put(field, val.trim());
+            }
+
+            if (result.size() <= 1)
+                return errorMap("No stats found for: " + npcName + ". Check the name matches the OSRS Wiki page title.");
+
+            result.put("wiki_url", "https://oldschool.runescape.wiki/w/" + pageTitle);
+            return result;
+        }
+        catch (Exception e)
+        {
+            log.warn("OSRS MCP: Failed to fetch NPC info for {}: {}", npcName, e.getMessage());
+            return errorMap("Failed to fetch Wiki data for: " + npcName);
+        }
+    }
+
+    private String extractWikiField(String wikiText, String field)
+    {
+        // Matches: |field = value or |field= value (with or without spaces)
+        String pattern = "\\|\\s*" + java.util.regex.Pattern.quote(field) + "\\s*=\\s*([^\\|\\n\\}]+)";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(pattern).matcher(wikiText);
+        if (m.find())
+        {
+            String val = m.group(1).trim();
+            // Strip wiki markup like [[...]] and {{...}}
+            val = val.replaceAll("\\[\\[([^\\|\\]]+)\\|?[^\\]]*\\]\\]", "$1");
+            val = val.replaceAll("\\{\\{[^\\}]+\\}\\}", "");
+            val = val.replaceAll("<[^>]+>", "");
+            return val.trim();
+        }
+        return null;
     }
 
         // ── BANK CLASSIFICATION (Phase 10) ───────────────────────────────────────

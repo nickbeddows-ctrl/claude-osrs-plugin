@@ -157,6 +157,10 @@ public class McpServer
             case "get_bank_summary":       return playerDataService.buildBankSummary();
             case "get_bank_top_value":     return playerDataService.buildBankTopValue();
             case "get_bank_coins":          return playerDataService.buildBankCoins();
+            case "get_npc_info":             {
+                String npcName = args != null && args.has("name") ? args.get("name").getAsString() : "";
+                return playerDataService.buildNpcInfo(npcName);
+            }
             case "get_combat_context":     return playerDataService.buildCombatContext();
             case "get_boss_kc":             return playerDataService.buildBossKc();
             case "get_price_trends":        {
@@ -231,6 +235,7 @@ public class McpServer
         tools.add(buildTool("get_bank_summary",       "Get total bank value, item count and coin balance. Requires bank to have been opened this session."));
         tools.add(buildTool("get_bank_top_value",      "Get the top 100 items in the bank sorted by total GE value. Requires bank open."));
         tools.add(buildTool("get_bank_coins",           "Get coin totals across inventory and bank combined."));
+        tools.add(buildTool("get_npc_info",          "Fetch monster stats from the OSRS Wiki by name: combat level, hitpoints, defence bonuses, max hit, attack speed, weaknesses, immune to poison/venom. Pass name as the monster name."));
         tools.add(buildTool("get_combat_context",  "Get combat context: effective levels, attack style, spec energy, active prayers, potion detection, and current target NPC."));
         tools.add(buildTool("get_boss_kc",          "Get boss kill counts: game-tracked slayer boss KCs and profile-stored KCs from ChatCommands plugin."));
         tools.add(buildTool("get_price_trends",  "Get price trend data for specific items: current price, 5m and 1h averages, trade volume, and rising/falling/stable direction. Pass item_ids array."));
