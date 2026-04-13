@@ -67,6 +67,19 @@ public class OsrsMcpPanel extends PluginPanel
     private final JTextField subdomainField  = new JTextField();
     private final JButton   saveSubdomainBtn = new JButton("Save & restart");
 
+    // Tailscale
+    private TailscaleService tailscaleService;
+    private final JLabel tailscaleStep1Label = new JLabel();
+    private final JLabel tailscaleStep2Label = new JLabel();
+    private final JLabel tailscaleStep3Label = new JLabel();
+    private final JButton copyTailscaleUrlBtn = new JButton("Copy tailscale.com");
+
+    // Section visibility refs
+    private JPanel relayPanelRef;
+    private JLabel relayHeaderRef;
+    private JPanel tailscalePanelRef;
+    private JLabel tailscaleHeaderRef;
+
     // Callbacks
     private Runnable         restartCallback;
     private RelayKeyService  relayKeyService;
@@ -93,11 +106,21 @@ public class OsrsMcpPanel extends PluginPanel
         root.add(Box.createVerticalStrut(6));
         root.add(buildSeparator());
         root.add(Box.createVerticalStrut(6));
-        root.add(buildSectionHeader("Cloud relay"));
+        relayHeaderRef = buildSectionHeader("Cloud relay");
+        root.add(relayHeaderRef);
         root.add(Box.createVerticalStrut(4));
-        root.add(buildRelaySection());
+        relayPanelRef = buildRelaySection();
+        root.add(relayPanelRef);
         root.add(Box.createVerticalStrut(6));
         root.add(buildSeparator());
+        root.add(Box.createVerticalStrut(6));
+        tailscaleHeaderRef = buildSectionHeader("Tailscale");
+        root.add(tailscaleHeaderRef);
+        root.add(Box.createVerticalStrut(4));
+        tailscalePanelRef = buildTailscaleSection();
+        root.add(tailscalePanelRef);
+        root.add(Box.createVerticalStrut(6));
+        root.add(buildSeparator()); // tools separator
         root.add(Box.createVerticalStrut(6));
         root.add(buildSectionHeader("Available tools"));
         root.add(Box.createVerticalStrut(4));
@@ -109,6 +132,7 @@ public class OsrsMcpPanel extends PluginPanel
     public void setRestartCallback(Runnable cb)   { this.restartCallback  = cb; }
     public void setRelayKeyService(RelayKeyService s) { this.relayKeyService = s; }
     public void setConfigManager(ConfigManager cm)    { this.configManager = cm; refreshSubdomainField(); }
+    public void setTailscaleService(TailscaleService ts) { this.tailscaleService = ts; }
 
     // ── SECTION BUILDERS ─────────────────────────────────────────────────────
 
@@ -430,7 +454,97 @@ public class OsrsMcpPanel extends PluginPanel
         });
     }
 
-    private JPanel buildToolsSection()
+    private JPanel buildTailscaleSection()
+    {
+        JPanel outer = new JPanel();
+        outer.setLayout(new BoxLayout(outer, BoxLayout.Y_AXIS));
+        outer.setBackground(SECTION_BG);
+        outer.setAlignmentX(LEFT_ALIGNMENT);
+        outer.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        outer.setBorder(new CompoundBorder(
+            new MatteBorder(1, 1, 1, 1, ColorScheme.MEDIUM_GRAY_COLOR),
+            new EmptyBorder(6, 8, 8, 8)
+        ));
+
+        // Step 1 -- detect / install
+        outer.add(buildStep("1", tailscaleStep1Label, buildTailscaleStep1Buttons()));
+        outer.add(Box.createVerticalStrut(4));
+
+        // Step 2 -- sign in on both devices
+        outer.add(buildStep("2", tailscaleStep2Label, null));
+        outer.add(Box.createVerticalStrut(4));
+
+        // Step 3 -- restart server
+        outer.add(buildStep("3", tailscaleStep3Label, null));
+        return outer;
+    }
+
+    private JPanel buildTailscaleStep1Buttons()
+    {
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        p.setBackground(SECTION_BG);
+        p.setAlignmentX(LEFT_ALIGNMENT);
+        styleButton(copyTailscaleUrlBtn);
+        copyTailscaleUrlBtn.addActionListener(e -> {
+            Toolkit.getDefaultToolkit().getSystemClipboard()
+                .setContents(new StringSelection("https://tailscale.com/download"), null);
+            flash(copyTailscaleUrlBtn, "Copied!", "Copy tailscale.com");
+        });
+        p.add(copyTailscaleUrlBtn);
+        return p;
+    }
+
+    private void refreshSections()
+    {
+        SwingUtilities.invokeLater(() ->
+        {
+            boolean isRelay     = currentMode == ConnectionMode.CLOUD_RELAY;
+            boolean isTailscale = currentMode == ConnectionMode.TAILSCALE;
+
+            if (relayHeaderRef != null)    relayHeaderRef.setVisible(isRelay);
+            if (relayPanelRef != null)     relayPanelRef.setVisible(isRelay);
+            if (tailscaleHeaderRef != null) tailscaleHeaderRef.setVisible(isTailscale);
+            if (tailscalePanelRef != null)  tailscalePanelRef.setVisible(isTailscale);
+
+            refreshTailscaleSteps();
+        });
+    }
+
+    private void refreshTailscaleSteps()
+    {
+        if (tailscaleService == null) return;
+        boolean running = tailscaleService.isRunning();
+        String ip = tailscaleService.getTailscaleIp();
+
+        if (running && ip != null)
+        {
+            // Tailscale is active -- all steps done
+            tailscaleStep1Label.setText("<html>Tailscale running on this device</html>");
+            tailscaleStep1Label.setForeground(STEP_DONE);
+            copyTailscaleUrlBtn.setVisible(false);
+
+            tailscaleStep2Label.setText("<html>Sign in with the same account on your other device</html>");
+            tailscaleStep2Label.setForeground(STEP_DONE);
+
+            tailscaleStep3Label.setText("<html>Active! Connect using: http://" + ip + ":" + currentPort + "/mcp</html>");
+            tailscaleStep3Label.setForeground(STEP_DONE);
+        }
+        else
+        {
+            // Tailscale not detected -- show setup steps
+            tailscaleStep1Label.setText("<html>Install Tailscale on this device (free)</html>");
+            tailscaleStep1Label.setForeground(STEP_ACTIVE);
+            copyTailscaleUrlBtn.setVisible(true);
+
+            tailscaleStep2Label.setText("<html>Sign in with the same Tailscale account on both devices</html>");
+            tailscaleStep2Label.setForeground(STEP_TODO);
+
+            tailscaleStep3Label.setText("<html>Come back here and click Restart server</html>");
+            tailscaleStep3Label.setForeground(STEP_TODO);
+        }
+    }
+
+        private JPanel buildToolsSection()
     {
         JPanel p = box(false);
         String[][] tools = {
@@ -688,6 +802,7 @@ public class OsrsMcpPanel extends PluginPanel
             else localUrlLabel.setText("");
             refreshSetupBlock();
             refreshSteps();
+            refreshSections();
         });
     }
 

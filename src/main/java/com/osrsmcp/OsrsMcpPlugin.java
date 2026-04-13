@@ -45,6 +45,7 @@ public class OsrsMcpPlugin extends Plugin
     {
         panel.setRestartCallback(this::restartServer);
         panel.setRelayKeyService(relayKeyService);
+        panel.setTailscaleService(tailscaleService);
         panel.setConfigManager(configManager);
         startServer();
 
