@@ -4,6 +4,7 @@ import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -38,6 +39,7 @@ public class OsrsMcpPlugin extends Plugin
     @Inject private RelayKeyService relayKeyService;
     @Inject private TailscaleService tailscaleService;
     @Inject private ConfigManager configManager;
+    @Inject private PlayerDataService playerDataService;
 
     private NavigationButton navButton;
 
@@ -120,6 +122,12 @@ public class OsrsMcpPlugin extends Plugin
     public void onGameStateChanged(GameStateChanged event)
     {
         panel.updateGameState(event.getGameState());
+    }
+
+    @Subscribe
+    public void onItemContainerChanged(ItemContainerChanged event)
+    {
+        playerDataService.onBankChanged(event);
     }
 
     @Subscribe

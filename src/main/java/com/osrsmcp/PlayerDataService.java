@@ -12,6 +12,7 @@ import net.runelite.api.GrandExchangeOffer;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.api.GrandExchangeOfferState;
+import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.gameval.DBTableID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
@@ -19,6 +20,7 @@ import net.runelite.api.GrandExchangeOffer;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.api.GrandExchangeOfferState;
+import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.game.ItemManager;
 
@@ -33,6 +35,9 @@ public class PlayerDataService
     @Inject private ItemManager itemManager;
     @Inject private OsrsMcpConfig config;
     @Inject private PluginManager pluginManager;
+
+    // Bank cache -- populated when player opens their bank
+    private volatile Item[] cachedBankItems = null;
 
     public boolean isLoggedIn()
     {
@@ -49,10 +54,12 @@ public class PlayerDataService
         if (config.shareLocation())  data.put("location",  buildLocation());
         data.put("quests",  buildQuestStates());
         data.put("diaries", buildDiaryStates());
+        data.put("bank",    buildBankValue());
         data.put("plugins", buildInstalledPlugins());
         data.put("slayer",  buildSlayerTask());
         data.put("clue",    buildClueScroll());
         data.put("ge",      buildGeOffers());
+        data.put("bank",    buildBankValue());
         data.put("plugins", buildInstalledPlugins());
         return data;
     }
@@ -345,6 +352,54 @@ public class PlayerDataService
         result.put("total", pluginList.size());
         result.put("enabled_count", pluginList.stream().filter(p -> (Boolean) p.get("enabled")).count());
         result.put("plugins", pluginList);
+        return result;
+    }
+
+        /** Called by OsrsMcpPlugin when a bank container event fires. */
+    public void onBankChanged(ItemContainerChanged event)
+    {
+        if (event.getContainerId() == InventoryID.BANK.getId())
+            cachedBankItems = event.getItemContainer().getItems();
+    }
+
+    public Map<String, Object> buildBankValue()
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (!isLoggedIn()) return errorMap("Player is not logged in");
+        if (cachedBankItems == null)
+        {
+            result.put("cached", false);
+            result.put("message", "Bank not yet opened this session. Open your bank to enable this tool.");
+            return result;
+        }
+
+        long totalValue = 0;
+        int uniqueItems = 0;
+        List<Map<String, Object>> items = new ArrayList<>();
+
+        for (Item item : cachedBankItems)
+        {
+            if (item.getId() <= 0 || item.getQuantity() <= 0) continue;
+            int price = itemManager.getItemPrice(item.getId());
+            long stackValue = (long) price * item.getQuantity();
+            totalValue += stackValue;
+            uniqueItems++;
+
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", itemManager.getItemComposition(item.getId()).getName());
+            entry.put("quantity", item.getQuantity());
+            entry.put("price_each", price);
+            entry.put("total_value", stackValue);
+            items.add(entry);
+        }
+
+        // Sort by value descending
+        items.sort((a, b) -> Long.compare((long) b.get("total_value"), (long) a.get("total_value")));
+
+        result.put("cached", true);
+        result.put("total_value_gp", totalValue);
+        result.put("unique_items", uniqueItems);
+        result.put("items", items);
         return result;
     }
 
