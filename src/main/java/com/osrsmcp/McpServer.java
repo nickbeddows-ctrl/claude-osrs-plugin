@@ -146,6 +146,9 @@ public class McpServer
             case "get_all":          return playerDataService.buildSnapshot();
             case "get_quest_states":  return playerDataService.buildQuestStates();
             case "get_diary_states":  return playerDataService.buildDiaryStates();
+            case "get_slayer_task":   return playerDataService.buildSlayerTask();
+            case "get_clue_scroll":   return playerDataService.buildClueScroll();
+            case "get_ge_offers":     { Map<String,Object> ge = new LinkedHashMap<>(); ge.put("offers", playerDataService.buildGeOffers()); return ge; }
             default: Map<String,Object> err = new LinkedHashMap<>(); err.put("error", "Unknown tool: " + toolName); return err;
         }
     }
@@ -189,6 +192,9 @@ public class McpServer
         tools.add(buildTool("get_all",          "Get all available player data in a single call: stats, equipment, inventory and location."));
         tools.add(buildTool("get_quest_states",  "Get the state of all quests (completed, in progress, not started) and total quest points."));
         tools.add(buildTool("get_diary_states",  "Get completion status of all Achievement Diaries across all regions and tiers (easy/medium/hard/elite)."));
+        tools.add(buildTool("get_slayer_task",   "Get current Slayer task: creature name, remaining count, location, points and streak."));
+        tools.add(buildTool("get_clue_scroll",   "Check if the player has an active clue scroll in their inventory and which tier it is."));
+        tools.add(buildTool("get_ge_offers",     "Get all active Grand Exchange offers including item, quantity, price and state."));
         result.add("tools", tools);
         return result;
     }

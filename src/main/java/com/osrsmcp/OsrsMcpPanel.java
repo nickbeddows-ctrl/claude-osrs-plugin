@@ -441,6 +441,9 @@ public class OsrsMcpPanel extends PluginPanel
             {"get_location",     "World coords & area"},
             {"get_quest_states", "All quest progress"},
             {"get_diary_states", "Achievement diary tiers"},
+            {"get_slayer_task",  "Current Slayer task"},
+            {"get_clue_scroll",  "Active clue scroll tier"},
+            {"get_ge_offers",    "GE offer slots"},
         };
         for (String[] t : tools) p.add(buildToolRow(t[0], t[1]));
         return p;

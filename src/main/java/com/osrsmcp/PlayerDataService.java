@@ -5,6 +5,13 @@ import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
 import net.runelite.api.Varbits;
 import net.runelite.api.VarPlayer;
+import net.runelite.api.GrandExchangeOffer;
+import net.runelite.api.GrandExchangeOfferState;
+import net.runelite.api.gameval.DBTableID;
+import net.runelite.api.gameval.VarPlayerID;
+import net.runelite.api.gameval.VarbitID;
+import net.runelite.api.GrandExchangeOffer;
+import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.game.ItemManager;
 
@@ -34,6 +41,9 @@ public class PlayerDataService
         if (config.shareLocation())  data.put("location",  buildLocation());
         data.put("quests",  buildQuestStates());
         data.put("diaries", buildDiaryStates());
+        data.put("slayer",  buildSlayerTask());
+        data.put("clue",    buildClueScroll());
+        data.put("ge",      buildGeOffers());
         return data;
     }
 
@@ -183,6 +193,112 @@ public class PlayerDataService
             for (int j = 0; j < tiers.length; j++)
                 region.put(tiers[j], client.getVarbitValue(diaries[i][j]) == 1);
             result.put(regions[i], region);
+        }
+        return result;
+    }
+
+        public Map<String, Object> buildSlayerTask()
+    {
+        if (!isLoggedIn()) return errorMap("Player is not logged in");
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        int remaining = client.getVarpValue(VarPlayerID.SLAYER_COUNT);
+        if (remaining <= 0)
+        {
+            result.put("task", null);
+            result.put("remaining", 0);
+        }
+        else
+        {
+            // Look up task name from game DB
+            String taskName = null;
+            try
+            {
+                int taskId = client.getVarpValue(VarPlayerID.SLAYER_TARGET);
+                List<Integer> taskRows = client.getDBRowsByValue(
+                    DBTableID.SlayerTask.ID, DBTableID.SlayerTask.COL_ID, 0, taskId);
+                if (!taskRows.isEmpty())
+                    taskName = (String) client.getDBTableField(
+                        taskRows.get(0), DBTableID.SlayerTask.COL_NAME_UPPERCASE, 0)[0];
+            }
+            catch (Exception e) { /* task name unavailable */ }
+
+            result.put("task", taskName);
+            result.put("remaining", remaining);
+            result.put("initial_amount", client.getVarpValue(VarPlayerID.SLAYER_COUNT_ORIGINAL));
+
+            // Location (e.g. "Catacombs of Kourend")
+            try
+            {
+                int areaId = client.getVarpValue(VarPlayerID.SLAYER_AREA);
+                if (areaId > 0)
+                {
+                    List<Integer> areaRows = client.getDBRowsByValue(
+                        DBTableID.SlayerArea.ID, DBTableID.SlayerArea.COL_AREA_ID, 0, areaId);
+                    if (!areaRows.isEmpty())
+                        result.put("location", client.getDBTableField(
+                            areaRows.get(0), DBTableID.SlayerArea.COL_AREA_NAME_IN_HELPER, 0)[0]);
+                }
+            }
+            catch (Exception e) { /* location unavailable */ }
+        }
+
+        result.put("points", client.getVarbitValue(VarbitID.SLAYER_POINTS));
+        result.put("streak", client.getVarbitValue(VarbitID.SLAYER_TASKS_COMPLETED));
+        return result;
+    }
+
+    public Map<String, Object> buildClueScroll()
+    {
+        if (!isLoggedIn()) return errorMap("Player is not logged in");
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        ItemContainer inventory = client.getItemContainer(InventoryID.INVENTORY);
+        String tier = null;
+
+        if (inventory != null)
+        {
+            for (Item item : inventory.getItems())
+            {
+                if (item.getId() <= 0) continue;
+                String name = itemManager.getItemComposition(item.getId()).getName().toLowerCase();
+                if (!name.contains("clue scroll")) continue;
+                if      (name.contains("beginner")) { tier = "beginner"; break; }
+                else if (name.contains("easy"))     { tier = "easy";     break; }
+                else if (name.contains("medium"))   { tier = "medium";   break; }
+                else if (name.contains("hard"))     { tier = "hard";     break; }
+                else if (name.contains("elite"))    { tier = "elite";    break; }
+                else if (name.contains("master"))   { tier = "master";   break; }
+            }
+        }
+
+        result.put("active", tier != null);
+        result.put("tier", tier);
+        return result;
+    }
+
+    public List<Map<String, Object>> buildGeOffers()
+    {
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (!isLoggedIn()) return result;
+
+        GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
+        if (offers == null) return result;
+
+        for (int i = 0; i < offers.length; i++)
+        {
+            GrandExchangeOffer offer = offers[i];
+            if (offer == null || offer.getState() == GrandExchangeOfferState.EMPTY) continue;
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("slot", i + 1);
+            entry.put("state", offer.getState().name().toLowerCase());
+            entry.put("item_id", offer.getItemId());
+            entry.put("item_name", itemManager.getItemComposition(offer.getItemId()).getName());
+            entry.put("quantity_traded", offer.getQuantitySold());
+            entry.put("total_quantity", offer.getTotalQuantity());
+            entry.put("price_per_item", offer.getPrice());
+            entry.put("total_spent", offer.getSpent());
+            result.add(entry);
         }
         return result;
     }
