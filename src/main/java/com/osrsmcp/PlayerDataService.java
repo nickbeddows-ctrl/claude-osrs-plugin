@@ -38,6 +38,7 @@ public class PlayerDataService
     @Inject private ItemManager itemManager;
     @Inject private OsrsMcpConfig config;
     @Inject private PluginManager pluginManager;
+    @Inject private WikiPriceService wikiPriceService;
 
     // Bank cache -- populated when player opens their bank
     private volatile Item[] cachedBankItems = null;
@@ -60,7 +61,7 @@ public class PlayerDataService
         data.put("nearby_npcs",   buildNearbyNpcs());
         data.put("world",          buildWorldInfo());
         data.put("prayers",       buildPrayers());
-        data.put("bank",          buildBankValue());
+        data.put("bank_summary",  buildBankSummary());
         data.put("collection_log", buildCollectionLog());
         data.put("plugins", buildInstalledPlugins());
         data.put("slayer",  buildSlayerTask());
@@ -69,7 +70,7 @@ public class PlayerDataService
         data.put("nearby_npcs",   buildNearbyNpcs());
         data.put("world",          buildWorldInfo());
         data.put("prayers",       buildPrayers());
-        data.put("bank",          buildBankValue());
+        data.put("bank_summary",  buildBankSummary());
         data.put("collection_log", buildCollectionLog());
         data.put("plugins", buildInstalledPlugins());
         return data;
@@ -373,48 +374,7 @@ public class PlayerDataService
             cachedBankItems = event.getItemContainer().getItems();
     }
 
-    public Map<String, Object> buildBankValue()
-    {
-        Map<String, Object> result = new LinkedHashMap<>();
-        if (!isLoggedIn()) return errorMap("Player is not logged in");
-        if (cachedBankItems == null)
-        {
-            result.put("cached", false);
-            result.put("message", "Bank not yet opened this session. Open your bank to enable this tool.");
-            return result;
-        }
-
-        long totalValue = 0;
-        int uniqueItems = 0;
-        List<Map<String, Object>> items = new ArrayList<>();
-
-        for (Item item : cachedBankItems)
-        {
-            if (item.getId() <= 0 || item.getQuantity() <= 0) continue;
-            int price = itemManager.getItemPrice(item.getId());
-            long stackValue = (long) price * item.getQuantity();
-            totalValue += stackValue;
-            uniqueItems++;
-
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("name", itemManager.getItemComposition(item.getId()).getName());
-            entry.put("quantity", item.getQuantity());
-            entry.put("price_each", price);
-            entry.put("total_value", stackValue);
-            items.add(entry);
-        }
-
-        // Sort by value descending
-        items.sort((a, b) -> Long.compare((long) b.get("total_value"), (long) a.get("total_value")));
-
-        result.put("cached", true);
-        result.put("total_value_gp", totalValue);
-        result.put("unique_items", uniqueItems);
-        result.put("items", items);
-        return result;
-    }
-
-        public Map<String, Object> buildCollectionLog()
+    public Map<String, Object> buildCollectionLog()
     {
         if (!isLoggedIn()) return errorMap("Player is not logged in");
         Map<String, Object> result = new LinkedHashMap<>();
@@ -598,5 +558,200 @@ public class PlayerDataService
     private Map<String, Object> errorMap(String message)
     {
         Map<String, Object> m = new LinkedHashMap<>(); m.put("error", message); return m;
+    }
+
+    // ── BANK TOOLS (Phase 9) ──────────────────────────────────────────────────
+
+    public Map<String, Object> buildBankSummary()
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (cachedBankItems == null)
+        {
+            result.put("cached", false);
+            result.put("message", "Bank not yet opened this session.");
+            result.put("coins",   getCoins());
+            return result;
+        }
+        long totalValue  = 0;
+        int  uniqueItems = 0;
+        for (Item item : cachedBankItems)
+        {
+            if (item.getId() <= 0 || item.getQuantity() <= 0) continue;
+            totalValue += (long) itemManager.getItemPrice(item.getId()) * item.getQuantity();
+            uniqueItems++;
+        }
+        result.put("cached",      true);
+        result.put("total_value", totalValue);
+        result.put("unique_items",uniqueItems);
+        result.put("coins",       getCoins());
+        return result;
+    }
+
+    public Map<String, Object> buildBankTopValue()
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (cachedBankItems == null)
+        {
+            result.put("cached", false);
+            result.put("message", "Bank not yet opened this session.");
+            return result;
+        }
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (Item item : cachedBankItems)
+        {
+            if (item.getId() <= 0 || item.getQuantity() <= 0) continue;
+            int  price      = itemManager.getItemPrice(item.getId());
+            long stackValue = (long) price * item.getQuantity();
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name",        itemManager.getItemComposition(item.getId()).getName());
+            entry.put("id",          item.getId());
+            entry.put("quantity",    item.getQuantity());
+            entry.put("price_each",  price);
+            entry.put("total_value", stackValue);
+            items.add(entry);
+        }
+        items.sort((a, b) -> Long.compare((long) b.get("total_value"), (long) a.get("total_value")));
+        List<Map<String, Object>> top100 = items.subList(0, Math.min(100, items.size()));
+        result.put("cached",      true);
+        result.put("item_count",  items.size());
+        result.put("showing",     top100.size());
+        result.put("items",       top100);
+        return result;
+    }
+
+    public Map<String, Object> buildBankCoins()
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("coins_inventory", getInventoryCoins());
+        result.put("coins_bank",      getBankCoins());
+        result.put("coins_total",     getCoins());
+        return result;
+    }
+
+    private long getCoins()        { return getInventoryCoins() + getBankCoins(); }
+    private long getInventoryCoins()
+    {
+        ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
+        if (inv == null) return 0;
+        for (Item item : inv.getItems())
+            if (item.getId() == 995) return item.getQuantity();
+        return 0;
+    }
+    private long getBankCoins()
+    {
+        if (cachedBankItems == null) return 0;
+        for (Item item : cachedBankItems)
+            if (item.getId() == 995) return item.getQuantity();
+        return 0;
+    }
+
+    // ── PRICES & FLIPPING (Phase 9) ───────────────────────────────────────────
+
+    public Map<String, Object> buildItemPrices(List<Integer> itemIds)
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<Map<String, Object>> prices = new ArrayList<>();
+        for (int id : itemIds)
+        {
+            WikiPriceService.PriceData pd   = wikiPriceService.getPrice(id);
+            WikiPriceService.ItemMeta  meta = wikiPriceService.getMeta(id);
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("id",   id);
+            entry.put("name", meta != null ? meta.name : itemManager.getItemComposition(id).getName());
+            if (pd != null)
+            {
+                entry.put("buy_price",   pd.high);
+                entry.put("sell_price",  pd.low);
+                entry.put("margin",      pd.margin());
+                entry.put("margin_pct",  Math.round(pd.marginPct() * 10) / 10.0);
+                if (meta != null) entry.put("ge_limit", meta.limit);
+            }
+            else entry.put("error", "Price not available");
+            prices.add(entry);
+        }
+        result.put("prices_age_seconds",
+            (System.currentTimeMillis() - wikiPriceService.lastPriceFetch) / 1000);
+        result.put("items", prices);
+        return result;
+    }
+
+    public Map<String, Object> buildFlipSuggestions()
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (cachedBankItems == null)
+        {
+            result.put("error", "Bank not yet opened this session. Open your bank first.");
+            return result;
+        }
+
+        long coins = getCoins();
+        result.put("coins_available", coins);
+
+        List<Map<String, Object>> suggestions = new ArrayList<>();
+        for (Item item : cachedBankItems)
+        {
+            if (item.getId() <= 0 || item.getQuantity() <= 0) continue;
+            WikiPriceService.PriceData pd   = wikiPriceService.getPrice(item.getId());
+            WikiPriceService.ItemMeta  meta = wikiPriceService.getMeta(item.getId());
+            if (pd == null || pd.high <= 0 || pd.low <= 0) continue;
+            int margin = pd.margin();
+            if (margin <= 0) continue;
+
+            // Can they afford to buy at least 1?
+            boolean canAfford = coins >= pd.high;
+
+            Map<String, Object> s = new LinkedHashMap<>();
+            s.put("name",           meta != null ? meta.name : itemManager.getItemComposition(item.getId()).getName());
+            s.put("id",             item.getId());
+            s.put("buy_at",         pd.high);
+            s.put("sell_at",        pd.low);
+            s.put("margin",         margin);
+            s.put("margin_pct",     Math.round(pd.marginPct() * 10) / 10.0);
+            s.put("can_afford",     canAfford);
+            if (meta != null)
+            {
+                s.put("ge_limit",       meta.limit);
+                s.put("max_profit",     (long) margin * meta.limit);
+                s.put("cost_full_flip", (long) pd.high * meta.limit);
+                s.put("highalch",       meta.highalch);
+            }
+            suggestions.add(s);
+        }
+
+        // Sort: highest margin % first, but deprioritise items you can't afford
+        suggestions.sort((a, b) -> {
+            boolean aAfford = (boolean) a.get("can_afford");
+            boolean bAfford = (boolean) b.get("can_afford");
+            if (aAfford != bAfford) return bAfford ? 1 : -1;
+            return Double.compare((double) b.get("margin_pct"), (double) a.get("margin_pct"));
+        });
+
+        result.put("prices_age_seconds",
+            (System.currentTimeMillis() - wikiPriceService.lastPriceFetch) / 1000);
+        result.put("suggestion_count", suggestions.size());
+        result.put("suggestions",      suggestions.subList(0, Math.min(20, suggestions.size())));
+        return result;
+    }
+
+    public Map<String, Object> buildMoneyMakingContext()
+    {
+        if (!isLoggedIn()) return errorMap("Player is not logged in");
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("coins",         getCoins());
+        result.put("location",      buildLocation());
+        result.put("combat_level",  client.getLocalPlayer().getCombatLevel());
+        // Slayer task context
+        Map<String, Object> slayer = buildSlayerTask();
+        if (slayer.get("task") != null) result.put("slayer_task", slayer);
+        // Key stats for common money making (Slayer, RC, Farming, Herblore, etc.)
+        Map<String, Object> stats = new LinkedHashMap<>();
+        for (net.runelite.api.Skill skill : net.runelite.api.Skill.values())
+        {
+            if (skill == net.runelite.api.Skill.OVERALL) continue;
+            stats.put(skill.getName().toLowerCase(), client.getRealSkillLevel(skill));
+        }
+        result.put("stats",         stats);
+        result.put("members_world", client.getWorldType().contains(net.runelite.api.WorldType.MEMBERS));
+        return result;
     }
 }

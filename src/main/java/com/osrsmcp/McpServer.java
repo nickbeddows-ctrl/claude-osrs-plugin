@@ -115,7 +115,8 @@ public class McpServer
         CompletableFuture<Map<String, Object>> future = new CompletableFuture<>();
         clientThread.invokeLater(() ->
         {
-            try   { future.complete(dispatchTool(toolName)); }
+            JsonObject arguments = params.has("arguments") ? params.getAsJsonObject("arguments") : new JsonObject();
+                try   { future.complete(dispatchTool(toolName, arguments)); }
             catch (Exception e) { future.completeExceptionally(e); }
         });
 
@@ -135,7 +136,7 @@ public class McpServer
         sendJsonRpcResult(exchange, id, result);
     }
 
-    private Map<String, Object> dispatchTool(String toolName)
+    private Map<String, Object> dispatchTool(String toolName, JsonObject args)
     {
         switch (toolName)
         {
@@ -152,7 +153,19 @@ public class McpServer
             case "get_world_info":         return playerDataService.buildWorldInfo();
             case "get_prayers":           return playerDataService.buildPrayers();
             case "get_collection_log":    return playerDataService.buildCollectionLog();
-            case "get_bank_value":        return playerDataService.buildBankValue();
+            case "get_bank_summary":       return playerDataService.buildBankSummary();
+            case "get_bank_top_value":     return playerDataService.buildBankTopValue();
+            case "get_bank_coins":          return playerDataService.buildBankCoins();
+            case "get_item_prices":         {
+                java.util.List<Integer> ids = new java.util.ArrayList<>();
+                if (args != null && args.has("item_ids")) {
+                    for (com.google.gson.JsonElement e : args.getAsJsonArray("item_ids"))
+                        ids.add(e.getAsInt());
+                }
+                return playerDataService.buildItemPrices(ids);
+            }
+            case "get_flip_suggestions":    return playerDataService.buildFlipSuggestions();
+            case "get_money_making_context":return playerDataService.buildMoneyMakingContext();
             case "get_installed_plugins": return playerDataService.buildInstalledPlugins();
             case "get_ge_offers":          { Map<String,Object> ge = new LinkedHashMap<>(); ge.put("offers", playerDataService.buildGeOffers()); return ge; }
             default: Map<String,Object> err = new LinkedHashMap<>(); err.put("error", "Unknown tool: " + toolName); return err;
@@ -204,7 +217,12 @@ public class McpServer
         tools.add(buildTool("get_world_info",      "Get the current world number and type (members, PvP, high risk, deadman, seasonal, skill total, etc.)."));
         tools.add(buildTool("get_prayers",         "Get currently active prayers and unlock status for special prayers (Preserve, Rigour, Augury, Chivalry, Piety)."));
         tools.add(buildTool("get_collection_log",  "Get the player's collection log progress: total unique items obtained, total possible, and a breakdown by category (bosses, raids, clues, minigames, other)."));
-        tools.add(buildTool("get_bank_value",        "Get the total GE value of the player's bank, plus a list of all items sorted by value. Requires the bank to have been opened this session."));
+        tools.add(buildTool("get_bank_summary",       "Get total bank value, item count and coin balance. Requires bank to have been opened this session."));
+        tools.add(buildTool("get_bank_top_value",      "Get the top 100 items in the bank sorted by total GE value. Requires bank open."));
+        tools.add(buildTool("get_bank_coins",           "Get coin totals across inventory and bank combined."));
+        tools.add(buildTool("get_item_prices",          "Get live Wiki GE prices for specific item IDs. Pass item_ids as an array of integers."));
+        tools.add(buildTool("get_flip_suggestions",     "Get flip suggestions from bank items cross-referenced with live GE margins, filtered by coin budget."));
+        tools.add(buildTool("get_money_making_context", "Get location, stats, coins and slayer task for money making method recommendations."));
         tools.add(buildTool("get_installed_plugins", "Get all installed RuneLite plugins (both built-in and Plugin Hub) with their enabled state. Use this to suggest relevant Plugin Hub plugins."));
         tools.add(buildTool("get_ge_offers",          "Get all active Grand Exchange offers including item, quantity, price and state."));
         result.add("tools", tools);
