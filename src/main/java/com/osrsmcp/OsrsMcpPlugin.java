@@ -35,6 +35,7 @@ public class OsrsMcpPlugin extends Plugin
     @Inject private OsrsMcpPanel panel;
     @Inject private RelayService relayService;
     @Inject private RelayKeyService relayKeyService;
+    @Inject private TailscaleService tailscaleService;
     @Inject private ConfigManager configManager;
 
     private NavigationButton navButton;
@@ -71,7 +72,11 @@ public class OsrsMcpPlugin extends Plugin
         try
         {
             mcpServer.start(config.port());
-            String lanIp = (mode == ConnectionMode.LAN) ? getLanIp() : null;
+            String lanIp = null;
+            if (mode == ConnectionMode.LAN)
+                lanIp = getLanIp();
+            else if (mode == ConnectionMode.TAILSCALE)
+                lanIp = tailscaleService.getTailscaleIp();
             panel.setServerRunning(true, config.port(), mode, lanIp);
         }
         catch (IOException e)

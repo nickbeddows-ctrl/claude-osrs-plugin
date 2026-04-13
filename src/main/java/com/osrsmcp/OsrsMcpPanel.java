@@ -669,11 +669,15 @@ public class OsrsMcpPanel extends PluginPanel
             statusMode.setText(running ? "Mode: " + mode : "");
             if (running)
             {
-                String displayUrl = (mode == ConnectionMode.LAN && lanIp != null)
-                    ? "http://" + lanIp + ":" + port + "/mcp"
-                    : (mode == ConnectionMode.LOCAL)
-                        ? "http://127.0.0.1:" + port + "/mcp"
-                        : "";
+                String displayUrl;
+                if (mode == ConnectionMode.LOCAL)
+                    displayUrl = "http://127.0.0.1:" + port + "/mcp";
+                else if ((mode == ConnectionMode.LAN || mode == ConnectionMode.TAILSCALE) && lanIp != null)
+                    displayUrl = "http://" + lanIp + ":" + port + "/mcp";
+                else if (mode == ConnectionMode.TAILSCALE && lanIp == null)
+                    displayUrl = "Tailscale not detected — install tailscale.com";
+                else
+                    displayUrl = "";
                 localUrlLabel.setText(displayUrl);
             }
             else localUrlLabel.setText("");

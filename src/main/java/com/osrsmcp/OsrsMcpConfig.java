@@ -18,9 +18,9 @@ public interface OsrsMcpConfig extends Config
 
     @ConfigItem(keyName = "connectionMode", name = "Connection mode",
         description = "<html><b>Local</b> — same machine only (default)<br>" +
-                      "<b>LAN</b> — devices on the same network/subnet<br>" +
-                      "<b>Cloud relay</b> — any device on any network via SSH tunnel " +
-                      "(no extra software, SSH is built into macOS and Windows 10+)</html>",
+                      "<b>LAN</b> — devices on the same subnet<br>" +
+                      "<b>Tailscale</b> — any device with Tailscale installed (reliable, free, recommended for cross-network)<br>" +
+                      "<b>Cloud relay</b> — any device, no extra software, uses SSH tunnel</html>",
         section = connectionSection, position = 1)
     default ConnectionMode connectionMode() { return ConnectionMode.LOCAL; }
 
