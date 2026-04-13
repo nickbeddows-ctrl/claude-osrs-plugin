@@ -54,12 +54,14 @@ public class PlayerDataService
         if (config.shareLocation())  data.put("location",  buildLocation());
         data.put("quests",  buildQuestStates());
         data.put("diaries", buildDiaryStates());
-        data.put("bank",    buildBankValue());
+        data.put("bank",          buildBankValue());
+        data.put("collection_log", buildCollectionLog());
         data.put("plugins", buildInstalledPlugins());
         data.put("slayer",  buildSlayerTask());
         data.put("clue",    buildClueScroll());
         data.put("ge",      buildGeOffers());
-        data.put("bank",    buildBankValue());
+        data.put("bank",          buildBankValue());
+        data.put("collection_log", buildCollectionLog());
         data.put("plugins", buildInstalledPlugins());
         return data;
     }
@@ -401,6 +403,41 @@ public class PlayerDataService
         result.put("unique_items", uniqueItems);
         result.put("items", items);
         return result;
+    }
+
+        public Map<String, Object> buildCollectionLog()
+    {
+        if (!isLoggedIn()) return errorMap("Player is not logged in");
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        int total    = client.getVarpValue(VarPlayerID.COLLECTION_COUNT);
+        int totalMax = client.getVarpValue(VarPlayerID.COLLECTION_COUNT_MAX);
+
+        result.put("unique_obtained", total);
+        result.put("unique_total",    totalMax);
+        result.put("completion_percent", totalMax > 0
+            ? Math.round((total * 1000.0 / totalMax)) / 10.0 : 0.0);
+
+        // Per-category breakdown
+        Map<String, Object> categories = new LinkedHashMap<>();
+        addCategory(categories, "bosses",    VarPlayerID.COLLECTION_COUNT_BOSSES,    VarPlayerID.COLLECTION_COUNT_BOSSES_MAX);
+        addCategory(categories, "raids",     VarPlayerID.COLLECTION_COUNT_RAIDS,     VarPlayerID.COLLECTION_COUNT_RAIDS_MAX);
+        addCategory(categories, "clues",     VarPlayerID.COLLECTION_COUNT_CLUES,     VarPlayerID.COLLECTION_COUNT_CLUES_MAX);
+        addCategory(categories, "minigames", VarPlayerID.COLLECTION_COUNT_MINIGAMES, VarPlayerID.COLLECTION_COUNT_MINIGAMES_MAX);
+        addCategory(categories, "other",     VarPlayerID.COLLECTION_COUNT_OTHER,     VarPlayerID.COLLECTION_COUNT_OTHER_MAX);
+        result.put("categories", categories);
+
+        return result;
+    }
+
+    private void addCategory(Map<String, Object> map, String name, int obtainedVar, int maxVar)
+    {
+        int obtained = client.getVarpValue(obtainedVar);
+        int max      = client.getVarpValue(maxVar);
+        Map<String, Object> cat = new LinkedHashMap<>();
+        cat.put("obtained", obtained);
+        cat.put("total",    max);
+        map.put(name, cat);
     }
 
         private static final int[] XP_TABLE = {
