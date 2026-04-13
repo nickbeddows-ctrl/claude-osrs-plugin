@@ -153,6 +153,7 @@ public class McpServer
             case "get_world_info":         return playerDataService.buildWorldInfo();
             case "get_prayers":           return playerDataService.buildPrayers();
             case "get_collection_log":    return playerDataService.buildCollectionLog();
+            case "get_bank_classified":    return playerDataService.buildBankClassified();
             case "get_bank_summary":       return playerDataService.buildBankSummary();
             case "get_bank_top_value":     return playerDataService.buildBankTopValue();
             case "get_bank_coins":          return playerDataService.buildBankCoins();
@@ -217,6 +218,7 @@ public class McpServer
         tools.add(buildTool("get_world_info",      "Get the current world number and type (members, PvP, high risk, deadman, seasonal, skill total, etc.)."));
         tools.add(buildTool("get_prayers",         "Get currently active prayers and unlock status for special prayers (Preserve, Rigour, Augury, Chivalry, Piety)."));
         tools.add(buildTool("get_collection_log",  "Get the player's collection log progress: total unique items obtained, total possible, and a breakdown by category (bosses, raids, clues, minigames, other)."));
+        tools.add(buildTool("get_bank_classified",   "Get bank items organised by category: equipment (with slot), food, potions, runes, ammo, materials, other. Includes Wiki examine text."));
         tools.add(buildTool("get_bank_summary",       "Get total bank value, item count and coin balance. Requires bank to have been opened this session."));
         tools.add(buildTool("get_bank_top_value",      "Get the top 100 items in the bank sorted by total GE value. Requires bank open."));
         tools.add(buildTool("get_bank_coins",           "Get coin totals across inventory and bank combined."));

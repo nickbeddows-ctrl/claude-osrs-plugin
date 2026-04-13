@@ -560,7 +560,138 @@ public class PlayerDataService
         Map<String, Object> m = new LinkedHashMap<>(); m.put("error", message); return m;
     }
 
-    // ── BANK TOOLS (Phase 9) ──────────────────────────────────────────────────
+    // ── BANK CLASSIFICATION (Phase 10) ───────────────────────────────────────
+
+    public Map<String, Object> buildBankClassified()
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (cachedBankItems == null)
+        {
+            result.put("cached", false);
+            result.put("message", "Bank not yet opened this session.");
+            return result;
+        }
+
+        List<Map<String, Object>> equipment   = new ArrayList<>();
+        List<Map<String, Object>> food        = new ArrayList<>();
+        List<Map<String, Object>> potions     = new ArrayList<>();
+        List<Map<String, Object>> runes       = new ArrayList<>();
+        List<Map<String, Object>> ammo        = new ArrayList<>();
+        List<Map<String, Object>> materials   = new ArrayList<>();
+        List<Map<String, Object>> other       = new ArrayList<>();
+
+        for (Item item : cachedBankItems)
+        {
+            if (item.getId() <= 0 || item.getQuantity() <= 0) continue;
+            net.runelite.api.ItemComposition comp = itemManager.getItemComposition(item.getId());
+            String name = comp.getName();
+            if (name == null || name.equals("null")) continue;
+
+            String nameLower = name.toLowerCase();
+            String[] actions = comp.getInventoryActions();
+            boolean hasWear   = hasAction(actions, "Wear");
+            boolean hasWield  = hasAction(actions, "Wield");
+            boolean hasEat    = hasAction(actions, "Eat");
+            boolean hasDrink  = hasAction(actions, "Drink");
+
+            Map<String, Object> entry = buildBankEntry(item, comp, name, nameLower);
+
+            if (isRune(nameLower))                           runes.add(entry);
+            else if (isAmmo(nameLower))                      ammo.add(entry);
+            else if (hasEat)                                 food.add(entry);
+            else if (hasDrink || isPotion(nameLower))        potions.add(entry);
+            else if (hasWear || hasWield)                    { entry.put("slot", inferSlot(nameLower, hasWield)); equipment.add(entry); }
+            else if (comp.isStackable() && !comp.isTradeable()) other.add(entry);
+            else if (comp.isStackable())                     materials.add(entry);
+            else                                             other.add(entry);
+        }
+
+        // Sort each category by quantity desc
+        Comparator<Map<String,Object>> byQty = (a, b) ->
+            Integer.compare((int) b.get("quantity"), (int) a.get("quantity"));
+
+        equipment.sort(Comparator.comparing(e -> (String) e.get("name")));
+        food.sort(byQty);
+        potions.sort(byQty);
+        runes.sort(byQty);
+        ammo.sort(byQty);
+        materials.sort(byQty);
+        other.sort(Comparator.comparing(e -> (String) e.get("name")));
+
+        result.put("cached", true);
+        result.put("equipment",  equipment);
+        result.put("food",       food);
+        result.put("potions",    potions);
+        result.put("runes",      runes);
+        result.put("ammo",       ammo);
+        result.put("materials",  materials);
+        result.put("other",      other);
+        return result;
+    }
+
+    private Map<String, Object> buildBankEntry(Item item, net.runelite.api.ItemComposition comp, String name, String nameLower)
+    {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("name",     name);
+        entry.put("id",       item.getId());
+        entry.put("quantity", item.getQuantity());
+        // Attach Wiki examine text if available
+        WikiPriceService.ItemMeta meta = wikiPriceService.getMeta(item.getId());
+        if (meta != null && meta.examine != null && !meta.examine.isEmpty())
+            entry.put("examine", meta.examine);
+        return entry;
+    }
+
+    private boolean hasAction(String[] actions, String target)
+    {
+        if (actions == null) return false;
+        for (String a : actions)
+            if (target.equals(a)) return true;
+        return false;
+    }
+
+    private boolean isRune(String name)
+    {
+        return name.endsWith("rune") || name.equals("death rune") || name.equals("blood rune")
+            || name.equals("soul rune") || name.equals("wrath rune") || name.equals("rune");
+    }
+
+    private boolean isAmmo(String name)
+    {
+        return name.contains("arrow") || name.contains("bolt") || name.contains("dart")
+            || name.contains("knife") || name.contains("thrownaxe") || name.contains("javelin")
+            || name.contains("cannonball") || name.contains("chinchompa");
+    }
+
+    private boolean isPotion(String name)
+    {
+        return name.contains("potion") || name.contains("brew") || name.contains("restore")
+            || name.contains("flask") || name.contains("mix") || name.contains("antipoison")
+            || name.contains("antidote") || name.contains("antifire") || name.contains("prayer pot")
+            || name.contains("stamina") || name.contains("divine") || name.contains("ancient brew");
+    }
+
+    private String inferSlot(String name, boolean wield)
+    {
+        if (wield) return name.contains("shield") || name.contains("defender") || name.contains("book")
+                              || name.contains("buckler") || name.contains("ward") ? "shield" : "weapon";
+        if (name.contains("helm") || name.contains("hat") || name.contains("hood") || name.contains("coif")
+            || name.contains("mask") || name.contains("tiara") || name.contains("crown") || name.contains("berserker helm")) return "head";
+        if (name.contains("cape") || name.contains("cloak") || name.contains("backpack")) return "cape";
+        if (name.contains("amulet") || name.contains("necklace") || name.contains("pendant")
+            || name.contains("salve") || name.contains("torture") || name.contains("fury")) return "amulet";
+        if (name.contains("platebody") || name.contains("chainbody") || name.contains("hauberk")
+            || name.contains(" top") || name.contains("chestplate") || name.contains(" body")
+            || name.contains("tabard") || name.contains("tunic") || name.contains("robetop")) return "body";
+        if (name.contains("platelegs") || name.contains("skirt") || name.contains("chaps")
+            || name.contains("tassets") || name.contains("robebottom") || name.contains("trousers")) return "legs";
+        if (name.contains("gloves") || name.contains("gauntlets") || name.contains("vambraces")) return "gloves";
+        if (name.contains("boots") || name.contains("shoes") || name.contains("sandals")) return "boots";
+        if (name.contains("ring")) return "ring";
+        return "equipment";
+    }
+
+        // ── BANK TOOLS (Phase 9) ──────────────────────────────────────────────────
 
     public Map<String, Object> buildBankSummary()
     {
