@@ -54,6 +54,8 @@ public class PlayerDataService
 
     // Bank cache -- populated when player opens their bank
     private volatile Item[] cachedBankItems = null;
+    // Seed vault cache -- populated when player opens seed vault
+    private volatile Item[] cachedSeedVaultItems = null;
 
     public boolean isLoggedIn()
     {
@@ -384,6 +386,8 @@ public class PlayerDataService
     {
         if (event.getContainerId() == InventoryID.BANK.getId())
             cachedBankItems = event.getItemContainer().getItems();
+        else if (event.getContainerId() == InventoryID.SEED_VAULT.getId())
+            cachedSeedVaultItems = event.getItemContainer().getItems();
     }
 
     public Map<String, Object> buildCollectionLog()
@@ -933,6 +937,71 @@ public class PlayerDataService
         if (!missing.isEmpty())
             result.put("stats_unavailable", missing);
 
+        return result;
+    }
+
+        public Map<String, Object> buildSeedVault()
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (cachedSeedVaultItems == null)
+        {
+            result.put("cached", false);
+            result.put("message", "Seed vault not yet opened this session. Visit the Farming Guild and open your seed vault to populate this.");
+            return result;
+        }
+
+        List<Map<String, Object>> seeds    = new ArrayList<>();
+        List<Map<String, Object>> saplings = new ArrayList<>();
+        List<Map<String, Object>> other    = new ArrayList<>();
+        long totalValue = 0;
+
+        for (Item item : cachedSeedVaultItems)
+        {
+            if (item.getId() <= 0 || item.getQuantity() <= 0) continue;
+            String name = itemManager.getItemComposition(item.getId()).getName();
+            if (name == null || name.equals("null")) continue;
+
+            String nameLower = name.toLowerCase();
+            WikiPriceService.ItemMeta meta = wikiPriceService.getMeta(item.getId());
+            WikiPriceService.PriceData pd  = wikiPriceService.getPrice(item.getId());
+
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name",     name);
+            entry.put("id",       item.getId());
+            entry.put("quantity", item.getQuantity());
+            if (pd != null && pd.low > 0)
+            {
+                long stackValue = (long) pd.low * item.getQuantity();
+                entry.put("price_each",  pd.low);
+                entry.put("total_value", stackValue);
+                totalValue += stackValue;
+            }
+            if (meta != null && meta.examine != null)
+                entry.put("examine", meta.examine);
+
+            if (nameLower.contains("sapling") || nameLower.contains("seedling"))
+                saplings.add(entry);
+            else if (nameLower.contains("seed") || nameLower.contains("spore")
+                  || nameLower.contains("potato") || nameLower.contains("onion")
+                  || nameLower.contains("cabbage") || nameLower.contains("tomato")
+                  || nameLower.contains("sweetcorn") || nameLower.contains("strawberry")
+                  || nameLower.contains("watermelon") || nameLower.contains("snape grass"))
+                seeds.add(entry);
+            else
+                other.add(entry);
+        }
+
+        Comparator<Map<String,Object>> byQty = (a, b) ->
+            Integer.compare((int) b.get("quantity"), (int) a.get("quantity"));
+        seeds.sort(byQty);
+        saplings.sort(Comparator.comparing(e -> (String) e.get("name")));
+        other.sort(byQty);
+
+        result.put("cached",      true);
+        result.put("total_value", totalValue);
+        result.put("seeds",       seeds);
+        result.put("saplings",    saplings);
+        result.put("other",       other);
         return result;
     }
 
