@@ -47,6 +47,7 @@ public class OsrsMcpPlugin extends Plugin
     protected void startUp() throws Exception
     {
         panel.setRestartCallback(this::restartServer);
+        playerDataService.loadPersistedItems();
         panel.setRelayKeyService(relayKeyService);
         panel.setTailscaleService(tailscaleService);
         panel.setConfigManager(configManager);

@@ -62,31 +62,33 @@ public class PlayerDataService
         return client.getGameState() == GameState.LOGGED_IN;
     }
 
+    /**
+     * get_all -- lightweight snapshot of essential context only.
+     * Heavy tools (bank contents, drop tables, BiS comparison etc.)
+     * are intentionally excluded -- the AI should call them on demand.
+     */
     public Map<String, Object> buildSnapshot()
     {
         Map<String, Object> data = new LinkedHashMap<>();
         if (!isLoggedIn()) { data.put("error", "Player is not logged in"); return data; }
+        // Core character state
         if (config.shareStats())     data.put("stats",     buildStats());
         if (config.shareEquipment()) data.put("equipment", buildEquipment());
         if (config.shareInventory()) data.put("inventory", buildInventory());
         if (config.shareLocation())  data.put("location",  buildLocation());
-        data.put("quests",  buildQuestStates());
-        data.put("diaries", buildDiaryStates());
-        data.put("nearby_npcs",   buildNearbyNpcs());
-        data.put("world",          buildWorldInfo());
+        // Progress
+        data.put("quests",        buildQuestStates());
+        data.put("diaries",       buildDiaryStates());
+        data.put("collection_log",buildCollectionLog());
         data.put("prayers",       buildPrayers());
+        // Active content
+        data.put("slayer",        buildSlayerTask());
+        data.put("clue",          buildClueScroll());
+        // Economy snapshot (summary only -- not full contents)
         data.put("bank_summary",  buildBankSummary());
-        data.put("collection_log", buildCollectionLog());
-        data.put("plugins", buildInstalledPlugins());
-        data.put("slayer",  buildSlayerTask());
-        data.put("clue",    buildClueScroll());
-        data.put("ge",      buildGeOffers());
-        data.put("nearby_npcs",   buildNearbyNpcs());
-        data.put("world",          buildWorldInfo());
-        data.put("prayers",       buildPrayers());
-        data.put("bank_summary",  buildBankSummary());
-        data.put("collection_log", buildCollectionLog());
-        data.put("plugins", buildInstalledPlugins());
+        data.put("ge_offers",     buildGeOffers());
+        // World context
+        data.put("world",         buildWorldInfo());
         return data;
     }
 
@@ -382,12 +384,64 @@ public class PlayerDataService
     }
 
         /** Called by OsrsMcpPlugin when a bank container event fires. */
+    private static final String CONFIG_GROUP = "osrsmcp";
+    private static final String KEY_BANK      = "bank_items";
+    private static final String KEY_SEED_VAULT= "seed_vault_items";
+
     public void onBankChanged(ItemContainerChanged event)
     {
         if (event.getContainerId() == InventoryID.BANK.getId())
+        {
             cachedBankItems = event.getItemContainer().getItems();
+            persistItems(KEY_BANK, cachedBankItems);
+        }
         else if (event.getContainerId() == InventoryID.SEED_VAULT.getId())
+        {
             cachedSeedVaultItems = event.getItemContainer().getItems();
+            persistItems(KEY_SEED_VAULT, cachedSeedVaultItems);
+        }
+    }
+
+    /** Called on plugin startup to restore cached items from profile config. */
+    public void loadPersistedItems()
+    {
+        cachedBankItems      = restoreItems(KEY_BANK);
+        cachedSeedVaultItems = restoreItems(KEY_SEED_VAULT);
+        log.debug("OSRS MCP: Restored {} bank items, {} seed vault items from config",
+            cachedBankItems != null ? cachedBankItems.length : 0,
+            cachedSeedVaultItems != null ? cachedSeedVaultItems.length : 0);
+    }
+
+    private void persistItems(String key, Item[] items)
+    {
+        if (items == null) return;
+        StringBuilder sb = new StringBuilder();
+        for (Item item : items)
+        {
+            if (item == null || item.getId() <= 0 || item.getQuantity() <= 0) continue;
+            if (sb.length() > 0) sb.append(",");
+            sb.append(item.getId()).append(":").append(item.getQuantity());
+        }
+        configManager.setRSProfileConfiguration(CONFIG_GROUP, key, sb.toString());
+    }
+
+    private Item[] restoreItems(String key)
+    {
+        String stored = configManager.getRSProfileConfiguration(CONFIG_GROUP, key);
+        if (stored == null || stored.isEmpty()) return null;
+        String[] parts = stored.split(",");
+        List<Item> items = new ArrayList<>();
+        for (String part : parts)
+        {
+            try
+            {
+                String[] kv = part.split(":");
+                if (kv.length != 2) continue;
+                items.add(new Item(Integer.parseInt(kv[0]), Integer.parseInt(kv[1])));
+            }
+            catch (NumberFormatException ignored) {}
+        }
+        return items.toArray(new Item[0]);
     }
 
     public Map<String, Object> buildCollectionLog()
