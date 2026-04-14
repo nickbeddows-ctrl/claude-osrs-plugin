@@ -50,13 +50,16 @@ public class CacheWriter
     // ── CHARACTER ─────────────────────────────────────────────────────────────
 
     public void writeCharacter(String username, int combatLevel,
-                               Map<String, Integer> skills, String location)
+                               Map<String, Integer> skills, String location,
+                               String accountType, boolean isIronman)
     {
         StringBuilder sb = new StringBuilder();
         sb.append("# Character\n");
         sb.append("**Last updated:** ").append(now()).append("\n\n");
         sb.append("| Field | Value |\n|-------|-------|\n");
         sb.append("| Username | ").append(username).append(" |\n");
+        sb.append("| Account type | ").append(accountType != null ? accountType.replace("_", " ") : "normal").append(" |\n");
+        if (isIronman) sb.append("| Ironman | Yes -- no trading, GE restricted or unavailable |\n");
         sb.append("| Combat level | ").append(combatLevel).append(" |\n");
         if (location != null) sb.append("| Location | ").append(location).append(" |\n");
         sb.append("\n## Skills\n");

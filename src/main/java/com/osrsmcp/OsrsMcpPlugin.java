@@ -150,7 +150,9 @@ public class OsrsMcpPlugin extends Plugin
         net.runelite.api.coords.WorldPoint wp = player.getWorldLocation();
         String loc = wp != null ? wp.getX() + ", " + wp.getY() : null;
         String username = config.shareUsername() ? player.getName() : "hidden";
-        cacheWriter.writeCharacter(username, player.getCombatLevel(), skills, loc);
+        net.runelite.api.vars.AccountType at = client.getAccountType();
+        boolean ironman = at != net.runelite.api.vars.AccountType.NORMAL;
+        cacheWriter.writeCharacter(username, player.getCombatLevel(), skills, loc, at.name().toLowerCase(), ironman);
     }
 
     @Subscribe

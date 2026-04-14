@@ -99,6 +99,34 @@ public class PlayerDataService
         Map<String, Object> result = new LinkedHashMap<>();
         if (config.shareUsername()) result.put("username", client.getLocalPlayer().getName());
         result.put("combat_level", client.getLocalPlayer().getCombatLevel());
+
+        // Account type -- critical context for all advice
+        net.runelite.api.vars.AccountType accountType = client.getAccountType();
+        result.put("account_type", accountType.name().toLowerCase());
+        boolean isAnyIronman = accountType != net.runelite.api.vars.AccountType.NORMAL;
+        boolean isUim        = accountType == net.runelite.api.vars.AccountType.ULTIMATE_IRONMAN;
+        boolean isHcim       = accountType == net.runelite.api.vars.AccountType.HARDCORE_IRONMAN
+                            || accountType == net.runelite.api.vars.AccountType.HARDCORE_GROUP_IRONMAN;
+        boolean isGroupIm    = accountType == net.runelite.api.vars.AccountType.GROUP_IRONMAN
+                            || accountType == net.runelite.api.vars.AccountType.HARDCORE_GROUP_IRONMAN;
+        result.put("is_ironman",       isAnyIronman);
+        result.put("is_uim",           isUim);
+        result.put("is_hcim",          isHcim);
+        result.put("is_group_ironman",  isGroupIm);
+        if (isAnyIronman)
+        {
+            List<String> restrictions = new ArrayList<>();
+            restrictions.add("cannot trade with other players");
+            restrictions.add("cannot receive items from other players");
+            if (isUim)
+            {
+                restrictions.add("no bank access");
+                restrictions.add("no GE access");
+            }
+            if (isHcim) restrictions.add("hardcore: permanent death removes HC status");
+            if (isGroupIm) restrictions.add("can trade within group members");
+            result.put("ironman_restrictions", restrictions);
+        }
         Map<String, Map<String, Object>> skills = new LinkedHashMap<>();
         for (Skill skill : Skill.values())
         {
@@ -1523,6 +1551,16 @@ public class PlayerDataService
     public Map<String, Object> buildFlipSuggestions()
     {
         Map<String, Object> result = new LinkedHashMap<>();
+        // UIM cannot use GE at all
+        net.runelite.api.vars.AccountType at = client.getAccountType();
+        if (at == net.runelite.api.vars.AccountType.ULTIMATE_IRONMAN)
+        {
+            result.put("not_applicable", true);
+            result.put("reason", "Ultimate Ironman accounts cannot use the Grand Exchange.");
+            return result;
+        }
+        if (at != net.runelite.api.vars.AccountType.NORMAL)
+            result.put("ironman_note", "Ironman accounts can use the GE to buy items but cannot sell player-obtained items. These suggestions reflect buy margins only.");
         if (cachedBankItems == null)
         {
             result.put("error", "Bank not yet opened this session. Open your bank first.");
@@ -1602,6 +1640,12 @@ public class PlayerDataService
         }
         result.put("stats",         stats);
         result.put("members_world", client.getWorldType().contains(net.runelite.api.WorldType.MEMBERS));
+        net.runelite.api.vars.AccountType mmAt = client.getAccountType();
+        result.put("account_type", mmAt.name().toLowerCase());
+        result.put("is_ironman",   mmAt != net.runelite.api.vars.AccountType.NORMAL);
+        result.put("is_uim",       mmAt == net.runelite.api.vars.AccountType.ULTIMATE_IRONMAN);
+        if (mmAt != net.runelite.api.vars.AccountType.NORMAL)
+            result.put("note", "Ironman restrictions apply -- no player trading, GE limited or unavailable. Focus on self-sufficient money making methods.");
         return result;
     }
 }
