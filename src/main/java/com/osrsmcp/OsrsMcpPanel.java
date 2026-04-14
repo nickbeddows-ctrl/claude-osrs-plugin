@@ -19,8 +19,6 @@ import java.awt.datatransfer.StringSelection;
 @Singleton
 public class OsrsMcpPanel extends PluginPanel
 {
-    public enum RelayStatus { OFF, CONNECTING, ACTIVE, ERROR, NEEDS_REGISTRATION }
-
     private static final Color SECTION_BG  = ColorScheme.DARKER_GRAY_COLOR;
     private static final Color GREEN       = new Color(0, 180, 90);
     private static final Color STEP_DONE   = new Color(0, 180, 90);
@@ -42,32 +40,7 @@ public class OsrsMcpPanel extends PluginPanel
     private String         currentLanIp = null;
     private ConnectionMode currentMode  = ConnectionMode.LOCAL;
 
-    // ── Cloud relay steps ─────────────────────────────────────────────────────
-    private final JPanel  relayStepsPanel = new JPanel();
-    private final JLabel  relayDot        = new JLabel("⬤");
-    private final JLabel  relayStatusText = new JLabel("Disabled");
-    private final JLabel  relayUrlLabel   = new JLabel();
-    private final JButton relayUrlCopy    = new JButton("Copy");
-    private final JPanel  relayUrlRow     = new JPanel(new BorderLayout(4, 0));
-    private String        fullRelayUrl    = null;
-
-    // Step labels
-    private final JLabel step1Label = new JLabel();
-    private final JLabel step2Label = new JLabel();
-    private final JLabel step3Label = new JLabel();
-    private final JLabel step4Label = new JLabel();
-
-    // Step buttons
-    private final JButton genKeyBtn      = new JButton("Generate key");
-    private final JButton copyKeyBtn     = new JButton("Copy public key");
-    private final JButton openRegBtn     = new JButton("Copy register URL");
-    private final JButton openDomainBtn  = new JButton("Copy domain URL");
-
-    // Step 4 subdomain field
-    private final JTextField subdomainField  = new JTextField();
-    private final JButton   saveSubdomainBtn = new JButton("Save & restart");
-
-    // Tailscale
+    // ── Tailscale ─────────────────────────────────────────────────────────────
     private TailscaleService tailscaleService;
     private final JLabel tailscaleStep1Label = new JLabel();
     private final JLabel tailscaleStep2Label = new JLabel();
@@ -78,15 +51,12 @@ public class OsrsMcpPanel extends PluginPanel
     private JPanel rootPanel;
 
     // Section visibility refs
-    private JPanel relayPanelRef;
-    private JLabel relayHeaderRef;
     private JPanel tailscalePanelRef;
     private JLabel tailscaleHeaderRef;
 
     // Callbacks
-    private Runnable         restartCallback;
-    private RelayKeyService  relayKeyService;
-    private ConfigManager    configManager;
+    private Runnable      restartCallback;
+    private ConfigManager configManager;
 
     public OsrsMcpPanel()
     {
@@ -110,21 +80,13 @@ public class OsrsMcpPanel extends PluginPanel
         root.add(Box.createVerticalStrut(6));
         root.add(buildSeparator());
         root.add(Box.createVerticalStrut(6));
-        relayHeaderRef = buildSectionHeader("Cloud relay");
-        root.add(relayHeaderRef);
-        root.add(Box.createVerticalStrut(4));
-        relayPanelRef = buildRelaySection();
-        root.add(relayPanelRef);
-        root.add(Box.createVerticalStrut(6));
-        root.add(buildSeparator());
-        root.add(Box.createVerticalStrut(6));
         tailscaleHeaderRef = buildSectionHeader("Tailscale");
         root.add(tailscaleHeaderRef);
         root.add(Box.createVerticalStrut(4));
         tailscalePanelRef = buildTailscaleSection();
         root.add(tailscalePanelRef);
         root.add(Box.createVerticalStrut(6));
-        root.add(buildSeparator()); // tools separator
+        root.add(buildSeparator());
         root.add(Box.createVerticalStrut(6));
         root.add(buildSectionHeader("Available tools"));
         root.add(Box.createVerticalStrut(4));
@@ -133,10 +95,9 @@ public class OsrsMcpPanel extends PluginPanel
         add(root, BorderLayout.NORTH);
     }
 
-    public void setRestartCallback(Runnable cb)   { this.restartCallback  = cb; }
-    public void setRelayKeyService(RelayKeyService s) { this.relayKeyService = s; }
-    public void setConfigManager(ConfigManager cm)    { this.configManager = cm; refreshSubdomainField(); }
-    public void setTailscaleService(TailscaleService ts) { this.tailscaleService = ts; }
+    public void setRestartCallback(Runnable cb)              { this.restartCallback  = cb; }
+    public void setConfigManager(ConfigManager cm)           { this.configManager = cm; }
+    public void setTailscaleService(TailscaleService ts)     { this.tailscaleService = ts; }
 
     // ── SECTION BUILDERS ─────────────────────────────────────────────────────
 
@@ -230,7 +191,7 @@ public class OsrsMcpPanel extends PluginPanel
         return p;
     }
 
-    private JPanel buildRelaySection()
+    private JPanel buildTailscaleSection()
     {
         JPanel outer = new JPanel();
         outer.setLayout(new BoxLayout(outer, BoxLayout.Y_AXIS));
@@ -241,56 +202,27 @@ public class OsrsMcpPanel extends PluginPanel
             new MatteBorder(1, 1, 1, 1, ColorScheme.MEDIUM_GRAY_COLOR),
             new EmptyBorder(6, 8, 8, 8)
         ));
-
-        // Status dot row
-        JPanel dotRow = hRow();
-        dotRow.setBackground(SECTION_BG);
-        relayDot.setFont(relayDot.getFont().deriveFont(9f));
-        relayDot.setForeground(Color.GRAY);
-        relayStatusText.setFont(FontManager.getRunescapeSmallFont());
-        relayStatusText.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
-        dotRow.add(relayDot);
-        dotRow.add(Box.createHorizontalStrut(4));
-        dotRow.add(relayStatusText);
-        outer.add(dotRow);
-
-        // Active URL row
-        relayUrlLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
-        relayUrlLabel.setForeground(ColorScheme.BRAND_ORANGE);
-        styleButton(relayUrlCopy);
-        relayUrlCopy.addActionListener(e -> {
-            if (fullRelayUrl != null)
-            {
-                Toolkit.getDefaultToolkit().getSystemClipboard()
-                    .setContents(new StringSelection(fullRelayUrl), null);
-                flash(relayUrlCopy, "Copied!", "Copy");
-            }
-        });
-        relayUrlRow.setBackground(SECTION_BG);
-        relayUrlRow.add(relayUrlLabel, BorderLayout.CENTER);
-        relayUrlRow.add(relayUrlCopy, BorderLayout.EAST);
-        relayUrlRow.setAlignmentX(LEFT_ALIGNMENT);
-        relayUrlRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
-        relayUrlRow.setVisible(false);
-        outer.add(Box.createVerticalStrut(2));
-        outer.add(relayUrlRow);
-
-        outer.add(Box.createVerticalStrut(8));
-        outer.add(buildSeparatorInner());
-        outer.add(Box.createVerticalStrut(8));
-
-        // Step-by-step setup
-        outer.add(buildStepHeader("Stable URL setup (optional)"));
+        outer.add(buildStep("1", tailscaleStep1Label, buildTailscaleStep1Buttons()));
         outer.add(Box.createVerticalStrut(4));
-        outer.add(buildStep("1", step1Label, buildStep1Buttons()));
+        outer.add(buildStep("2", tailscaleStep2Label, null));
         outer.add(Box.createVerticalStrut(4));
-        outer.add(buildStep("2", step2Label, buildStep2Buttons()));
-        outer.add(Box.createVerticalStrut(4));
-        outer.add(buildStep("3", step3Label, buildStep3Buttons()));
-        outer.add(Box.createVerticalStrut(4));
-        outer.add(buildStep("4", step4Label, buildStep4Subdomain()));
-
+        outer.add(buildStep("3", tailscaleStep3Label, null));
         return outer;
+    }
+
+    private JPanel buildTailscaleStep1Buttons()
+    {
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        p.setBackground(SECTION_BG);
+        p.setAlignmentX(LEFT_ALIGNMENT);
+        styleButton(copyTailscaleUrlBtn);
+        copyTailscaleUrlBtn.addActionListener(e -> {
+            Toolkit.getDefaultToolkit().getSystemClipboard()
+                .setContents(new StringSelection("https://tailscale.com/download"), null);
+            flash(copyTailscaleUrlBtn, "Copied!", "Copy tailscale.com");
+        });
+        p.add(copyTailscaleUrlBtn);
+        return p;
     }
 
     private JPanel buildStep(String number, JLabel label, JPanel buttons)
@@ -312,8 +244,6 @@ public class OsrsMcpPanel extends PluginPanel
         num.setPreferredSize(new Dimension(14, 20));
         num.setVerticalAlignment(SwingConstants.TOP);
 
-        // Use HTML to allow word wrap; actual color set via setForeground doesn't work with HTML
-        // so we store the label text without HTML wrapper and add it in refreshSteps
         label.setFont(FontManager.getRunescapeSmallFont());
         label.setForeground(STEP_TODO);
         label.setVerticalAlignment(SwingConstants.TOP);
@@ -330,174 +260,6 @@ public class OsrsMcpPanel extends PluginPanel
         return p;
     }
 
-    private JPanel buildStep1Buttons()
-    {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        p.setBackground(SECTION_BG);
-        p.setAlignmentX(LEFT_ALIGNMENT);
-        styleButton(genKeyBtn);
-        styleButton(copyKeyBtn);
-        genKeyBtn.addActionListener(e -> {
-            if (relayKeyService == null) return;
-            genKeyBtn.setEnabled(false);
-            genKeyBtn.setText("Generating...");
-            new Thread(() -> {
-                boolean ok = relayKeyService.generateKey();
-                SwingUtilities.invokeLater(() -> {
-                    refreshSteps();
-                    genKeyBtn.setEnabled(true);
-                    genKeyBtn.setText(ok ? "Generate key" : "Failed — try again");
-                });
-            }, "osrs-mcp-keygen").start();
-        });
-        copyKeyBtn.addActionListener(e -> {
-            if (relayKeyService == null) return;
-            String pub = relayKeyService.getPublicKey();
-            if (pub != null)
-            {
-                Toolkit.getDefaultToolkit().getSystemClipboard()
-                    .setContents(new StringSelection(pub), null);
-                flash(copyKeyBtn, "Copied!", "Copy public key");
-            }
-        });
-        // Only show generate button if no key exists; copy key is always shown when key exists
-        p.add(genKeyBtn);
-        p.add(copyKeyBtn);
-        return p;
-    }
-
-    private JPanel buildStep2Buttons()
-    {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        p.setBackground(SECTION_BG);
-        p.setAlignmentX(LEFT_ALIGNMENT);
-        styleButton(openRegBtn);
-        openRegBtn.addActionListener(e -> {
-            if (relayKeyService == null) return;
-            String url = relayKeyService.getRegistrationUrl();
-            Toolkit.getDefaultToolkit().getSystemClipboard()
-                .setContents(new StringSelection(url), null);
-            flash(openRegBtn, "URL copied!", "Copy register URL");
-        });
-        p.add(openRegBtn);
-        return p;
-    }
-
-    private JPanel buildStep3Buttons()
-    {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        p.setBackground(SECTION_BG);
-        p.setAlignmentX(LEFT_ALIGNMENT);
-        styleButton(openDomainBtn);
-        openDomainBtn.addActionListener(e -> {
-            String sub = subdomainField.getText().trim();
-            String hint = sub.isEmpty() ? "" : " (enter: " + sub + ")";
-            openDomainBtn.setToolTipText("console.serveo.net/domains → Add Domain" + hint);
-            Toolkit.getDefaultToolkit().getSystemClipboard()
-                .setContents(new StringSelection("https://console.serveo.net/domains"), null);
-            flash(openDomainBtn, "URL copied!", "Copy domain URL");
-        });
-        p.add(openDomainBtn);
-        return p;
-    }
-
-    private JPanel buildStep4Subdomain()
-    {
-        JPanel p = new JPanel();
-        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-        p.setBackground(SECTION_BG);
-        p.setAlignmentX(LEFT_ALIGNMENT);
-
-        // Text field
-        subdomainField.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 10));
-        subdomainField.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        subdomainField.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-        subdomainField.setCaretColor(ColorScheme.LIGHT_GRAY_COLOR);
-        subdomainField.setBorder(new CompoundBorder(
-            new MatteBorder(1, 1, 1, 1, ColorScheme.MEDIUM_GRAY_COLOR),
-            new EmptyBorder(3, 6, 3, 6)
-        ));
-        subdomainField.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, 24));
-        subdomainField.setAlignmentX(LEFT_ALIGNMENT);
-        subdomainField.setToolTipText("e.g. yourname-osrs-mcp");
-        p.add(Box.createVerticalStrut(3));
-        p.add(subdomainField);
-        p.add(Box.createVerticalStrut(4));
-
-        // Save & restart button
-        styleButton(saveSubdomainBtn);
-        saveSubdomainBtn.setAlignmentX(LEFT_ALIGNMENT);
-        saveSubdomainBtn.addActionListener(e -> {
-            String val = subdomainField.getText().trim();
-            if (configManager != null)
-                configManager.setConfiguration("osrsmcp", "relaySubdomain", val);
-            if (restartCallback != null)
-            {
-                saveSubdomainBtn.setEnabled(false);
-                saveSubdomainBtn.setText("Restarting...");
-                new Thread(() -> {
-                    restartCallback.run();
-                    javax.swing.SwingUtilities.invokeLater(() -> {
-                        saveSubdomainBtn.setEnabled(true);
-                        saveSubdomainBtn.setText("Save & restart");
-                    });
-                }, "osrs-mcp-subdomain-restart").start();
-            }
-        });
-        p.add(saveSubdomainBtn);
-        return p;
-    }
-
-    private void refreshSubdomainField()
-    {
-        SwingUtilities.invokeLater(() -> {
-            if (configManager == null) return;
-            String current = configManager.getConfiguration("osrsmcp", "relaySubdomain");
-            if (current != null && !current.isEmpty())
-                subdomainField.setText(current);
-        });
-    }
-
-    private JPanel buildTailscaleSection()
-    {
-        JPanel outer = new JPanel();
-        outer.setLayout(new BoxLayout(outer, BoxLayout.Y_AXIS));
-        outer.setBackground(SECTION_BG);
-        outer.setAlignmentX(LEFT_ALIGNMENT);
-        outer.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
-        outer.setBorder(new CompoundBorder(
-            new MatteBorder(1, 1, 1, 1, ColorScheme.MEDIUM_GRAY_COLOR),
-            new EmptyBorder(6, 8, 8, 8)
-        ));
-
-        // Step 1 -- detect / install
-        outer.add(buildStep("1", tailscaleStep1Label, buildTailscaleStep1Buttons()));
-        outer.add(Box.createVerticalStrut(4));
-
-        // Step 2 -- sign in on both devices
-        outer.add(buildStep("2", tailscaleStep2Label, null));
-        outer.add(Box.createVerticalStrut(4));
-
-        // Step 3 -- restart server
-        outer.add(buildStep("3", tailscaleStep3Label, null));
-        return outer;
-    }
-
-    private JPanel buildTailscaleStep1Buttons()
-    {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        p.setBackground(SECTION_BG);
-        p.setAlignmentX(LEFT_ALIGNMENT);
-        styleButton(copyTailscaleUrlBtn);
-        copyTailscaleUrlBtn.addActionListener(e -> {
-            Toolkit.getDefaultToolkit().getSystemClipboard()
-                .setContents(new StringSelection("https://tailscale.com/download"), null);
-            flash(copyTailscaleUrlBtn, "Copied!", "Copy tailscale.com");
-        });
-        p.add(copyTailscaleUrlBtn);
-        return p;
-    }
-
     public void refreshSectionsForMode(ConnectionMode mode)
     {
         SwingUtilities.invokeLater(() -> {
@@ -508,18 +270,10 @@ public class OsrsMcpPanel extends PluginPanel
 
     private void refreshSections()
     {
-        // Must be called on EDT
-        boolean isRelay     = currentMode == ConnectionMode.CLOUD_RELAY;
         boolean isTailscale = currentMode == ConnectionMode.TAILSCALE;
-
-        if (relayHeaderRef != null)     relayHeaderRef.setVisible(isRelay);
-        if (relayPanelRef != null)      relayPanelRef.setVisible(isRelay);
         if (tailscaleHeaderRef != null) tailscaleHeaderRef.setVisible(isTailscale);
         if (tailscalePanelRef != null)  tailscalePanelRef.setVisible(isTailscale);
-
         refreshTailscaleSteps();
-
-        // Tell the root container to recalculate layout
         if (rootPanel != null) { rootPanel.revalidate(); rootPanel.repaint(); }
         revalidate();
         repaint();
@@ -533,109 +287,25 @@ public class OsrsMcpPanel extends PluginPanel
 
         if (running && ip != null)
         {
-            // Tailscale is active -- all steps done
             tailscaleStep1Label.setText("<html>Tailscale running on this device</html>");
             tailscaleStep1Label.setForeground(STEP_DONE);
             copyTailscaleUrlBtn.setVisible(false);
-
             tailscaleStep2Label.setText("<html>Sign in with the same account on your other device</html>");
             tailscaleStep2Label.setForeground(STEP_DONE);
-
             tailscaleStep3Label.setText("<html>Active! Connect using: http://" + ip + ":" + currentPort + "/mcp</html>");
             tailscaleStep3Label.setForeground(STEP_DONE);
         }
         else
         {
-            // Tailscale not detected -- show setup steps
             tailscaleStep1Label.setText("<html>Install Tailscale on this device (free)</html>");
             tailscaleStep1Label.setForeground(STEP_ACTIVE);
             copyTailscaleUrlBtn.setVisible(true);
-
             tailscaleStep2Label.setText("<html>Sign in with the same Tailscale account on both devices</html>");
             tailscaleStep2Label.setForeground(STEP_TODO);
-
             tailscaleStep3Label.setText("<html>Come back here and click Restart server</html>");
             tailscaleStep3Label.setForeground(STEP_TODO);
         }
     }
-
-        private JPanel buildToolsSection()
-    {
-        JPanel p = box(false);
-        String[][] tools = {
-            {"get_all",          "All data in one call"},
-            {"get_player_stats", "Skill levels & XP"},
-            {"get_equipment",    "Equipped gear by slot"},
-            {"get_inventory",    "Inventory contents"},
-            {"get_location",     "World coords & area"},
-            {"get_quest_states", "All quest progress"},
-            {"get_diary_states", "Achievement diary tiers"},
-            {"get_slayer_task",  "Current Slayer task"},
-            {"get_clue_scroll",  "Active clue scroll tier"},
-            {"get_ge_offers",          "GE offer slots"},
-            {"get_installed_plugins",   "Installed RuneLite plugins"},
-        };
-        for (String[] t : tools) p.add(buildToolRow(t[0], t[1]));
-        return p;
-    }
-
-    // ── STEP STATE ────────────────────────────────────────────────────────────
-
-    public void refreshSteps()
-    {
-        SwingUtilities.invokeLater(() ->
-        {
-            if (relayKeyService == null) return;
-            boolean hasKey = relayKeyService.keyExists();
-            String sub = subdomainField.getText().trim();
-            // "Stable URL active" only when the running URL actually contains the subdomain
-            boolean stableActive = fullRelayUrl != null && !sub.isEmpty()
-                && fullRelayUrl.toLowerCase().contains(sub.toLowerCase());
-            boolean active = stableActive;
-
-            // Step 1 — SSH key
-            if (hasKey)
-            {
-                step1Label.setText("<html>SSH key ready</html>");
-                step1Label.setForeground(STEP_DONE);
-                genKeyBtn.setVisible(false);
-                copyKeyBtn.setEnabled(true);
-            }
-            else
-            {
-                step1Label.setText("<html>Generate a dedicated SSH key for this plugin</html>");
-                step1Label.setForeground(STEP_ACTIVE);
-                genKeyBtn.setVisible(true);
-                genKeyBtn.setText("Generate key");
-                copyKeyBtn.setEnabled(false);
-            }
-
-            // Step 2 — Register SSH key on serveo
-            step2Label.setText(hasKey
-                ? "<html>Copy the register URL and open it in your browser. Sign in with Google or GitHub to register your SSH key with serveo.</html>"
-                : "<html>Complete step 1 first</html>");
-            step2Label.setForeground(hasKey ? STEP_ACTIVE : STEP_TODO);
-            openRegBtn.setEnabled(hasKey);
-
-            // Step 3 — Add domain on serveo
-            String subHint = sub.isEmpty() ? "yourname-osrs-mcp" : sub;
-            step3Label.setText(hasKey
-                ? "<html>Copy the domain URL, open it in your browser, click Add Domain and enter <b>" + subHint + "</b></html>"
-                : "<html>Complete steps 1 and 2 first</html>");
-            step3Label.setForeground(hasKey ? STEP_ACTIVE : STEP_TODO);
-            openDomainBtn.setEnabled(hasKey);
-
-            // Step 4 — Enter subdomain in panel and save
-            step4Label.setText(stableActive
-                ? "<html>Stable URL active!</html>"
-                : (fullRelayUrl != null && !sub.isEmpty() && !stableActive)
-                    ? "<html>Random URL is active but subdomain not matched yet. Check your subdomain is registered on serveo, then Save & restart.</html>"
-                    : "<html>Type your subdomain below and click Save & restart.</html>");
-            step4Label.setForeground(stableActive ? STEP_DONE : (hasKey ? STEP_ACTIVE : STEP_TODO));
-        });
-    }
-
-    // ── SETUP CODE BLOCK ─────────────────────────────────────────────────────
 
     private void refreshSetupBlock()
     {
@@ -653,10 +323,6 @@ public class OsrsMcpPanel extends PluginPanel
                 url = "http://" + tsIp + ":" + currentPort + "/mcp";
                 argsLine = "      \"" + url + "\",\n      \"--allow-http\"]";
                 break;
-            case CLOUD_RELAY:
-                url = fullRelayUrl != null ? fullRelayUrl : "https://YOUR_RELAY_URL/mcp";
-                argsLine = "      \"" + url + "\"]";
-                break;
             default:
                 url = "http://127.0.0.1:" + currentPort + "/mcp";
                 argsLine = "      \"" + url + "\"]";
@@ -671,6 +337,41 @@ public class OsrsMcpPanel extends PluginPanel
         );
     }
 
+    private JPanel buildToolsSection()
+    {
+        JPanel p = box(false);
+        String[][] tools = {
+            {"get_all",               "All data in one call"},
+            {"get_player_stats",      "Skill levels & XP"},
+            {"get_equipment",         "Equipped gear by slot"},
+            {"get_inventory",         "Inventory contents"},
+            {"get_location",          "World coords & area"},
+            {"get_quest_states",      "All quest progress"},
+            {"get_diary_states",      "Achievement diary tiers"},
+            {"get_slayer_task",       "Current Slayer task"},
+            {"get_clue_scroll",       "Active clue scroll tier"},
+            {"get_ge_offers",         "GE offer slots"},
+            {"get_installed_plugins", "Installed plugins"},
+            {"get_bank_summary",      "Bank value & coins"},
+            {"get_bank_classified",   "Bank by category"},
+            {"get_bank_top_value",    "Top bank items by value"},
+            {"get_farming_patches",   "Herb patch states"},
+            {"get_seed_vault",        "Seed vault contents"},
+            {"get_drop_table",        "Monster drops + GP/kill"},
+            {"get_equipment_stats",   "Equipment bonuses & max hit"},
+            {"get_bis_comparison",    "BiS gear comparison"},
+            {"get_combat_context",    "Combat context & potions"},
+            {"get_boss_kc",           "Boss kill counts"},
+            {"get_npc_info",          "Monster stats from Wiki"},
+            {"get_flip_suggestions",  "GE flip candidates"},
+            {"get_price_trends",      "Price trend data"},
+            {"get_cache_index",       "List cache files"},
+            {"read_cache",            "Read a cache file"},
+        };
+        for (String[] t : tools) p.add(buildToolRow(t[0], t[1]));
+        return p;
+    }
+
     // ── COMPONENT HELPERS ────────────────────────────────────────────────────
 
     private JSeparator buildSeparator()
@@ -683,30 +384,11 @@ public class OsrsMcpPanel extends PluginPanel
         return s;
     }
 
-    private JSeparator buildSeparatorInner()
-    {
-        JSeparator s = new JSeparator();
-        s.setForeground(ColorScheme.MEDIUM_GRAY_COLOR);
-        s.setBackground(SECTION_BG);
-        s.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
-        s.setAlignmentX(LEFT_ALIGNMENT);
-        return s;
-    }
-
     private JLabel buildSectionHeader(String text)
     {
         JLabel l = new JLabel(text);
         l.setFont(FontManager.getRunescapeSmallFont());
         l.setForeground(ColorScheme.BRAND_ORANGE);
-        l.setAlignmentX(LEFT_ALIGNMENT);
-        return l;
-    }
-
-    private JLabel buildStepHeader(String text)
-    {
-        JLabel l = new JLabel(text);
-        l.setFont(FontManager.getRunescapeSmallFont().deriveFont(Font.BOLD));
-        l.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
         l.setAlignmentX(LEFT_ALIGNMENT);
         return l;
     }
@@ -822,12 +504,9 @@ public class OsrsMcpPanel extends PluginPanel
             }
             else localUrlLabel.setText("");
             refreshSetupBlock();
-            refreshSteps();
             refreshSections();
         });
     }
-
-    public void setStatus(boolean running, int port) { setServerRunning(running, port, ConnectionMode.LOCAL, null); }
 
     public void setError(String message)
     {
@@ -835,52 +514,6 @@ public class OsrsMcpPanel extends PluginPanel
         {
             statusDot.setForeground(ColorScheme.PROGRESS_ERROR_COLOR);
             statusText.setText("Error: " + message);
-        });
-    }
-
-    public void setRelayStatus(RelayStatus status, String url)
-    {
-        SwingUtilities.invokeLater(() ->
-        {
-            switch (status)
-            {
-                case OFF:
-                    relayDot.setForeground(Color.GRAY);
-                    relayStatusText.setText("Disabled — set mode to Cloud relay");
-                    relayUrlRow.setVisible(false);
-                    fullRelayUrl = null;
-                    break;
-                case CONNECTING:
-                    relayDot.setForeground(ColorScheme.BRAND_ORANGE);
-                    relayStatusText.setText("Connecting...");
-                    relayUrlRow.setVisible(false);
-                    fullRelayUrl = null;
-                    break;
-                case ACTIVE:
-                    relayDot.setForeground(GREEN);
-                    relayStatusText.setText("Active");
-                    fullRelayUrl = url;
-                    String display = url != null && url.length() > 32
-                        ? url.substring(0, 32) + "..." : url;
-                    relayUrlLabel.setText(display);
-                    relayUrlLabel.setToolTipText(url);
-                    relayUrlRow.setVisible(true);
-                    refreshSetupBlock();
-                    break;
-                case ERROR:
-                    relayDot.setForeground(ColorScheme.PROGRESS_ERROR_COLOR);
-                    relayStatusText.setText("Failed — check internet connection");
-                    fullRelayUrl = null;
-                    relayUrlRow.setVisible(false);
-                    break;
-                case NEEDS_REGISTRATION:
-                    relayDot.setForeground(ColorScheme.BRAND_ORANGE);
-                    relayStatusText.setText("SSH key not registered — see step 2 below");
-                    fullRelayUrl = null;
-                    relayUrlRow.setVisible(false);
-                    break;
-            }
-            refreshSteps();
         });
     }
 

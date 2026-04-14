@@ -185,27 +185,6 @@ RuneLite is on one device, your AI tool is on another, both on the same network.
 
 ---
 
-### Mode 4 — Cloud Relay (no extra software)
-
-SSH reverse tunnelling for when you can't install Tailscale. SSH is built into macOS and Windows 10/11.
-
-1. Set **Connection mode** to **Cloud relay** in plugin settings
-2. Click **Restart server** — the panel shows a public HTTPS URL once connected
-3. Use **Copy config** to paste the snippet into your AI tool config
-
-Uses [serveo.net](https://serveo.net) with automatic fallback to [localhost.run](https://localhost.run). Both are free with no account required.
-
-> The URL changes every restart unless you set up a stable subdomain (see below).
-
-#### Stable URL (optional)
-
-1. Enter a unique subdomain in the **Stable URL setup** field (e.g. `yourname-osrs-mcp`)
-2. Click **Copy register URL**, open it in your browser and sign in with Google or GitHub
-3. Click **Copy domain URL**, open it, click **Add Domain** and enter your subdomain
-4. Click **Save & restart** — your URL will always be `https://yourname-osrs-mcp.serveousercontent.com/mcp`
-
-> Serveo's key authentication can be intermittently unreliable, falling back to a random URL even when correctly configured. Tailscale is the more reliable option if a stable URL is important.
-
 ---
 
 ## Other AI tools
@@ -244,18 +223,16 @@ The plugin works with any MCP-compatible tool.
 - Individual toggles for stats, equipment, inventory, location and username in plugin settings
 - Optional Bearer token for LAN and relay setups
 - Read-only — the plugin never sends commands to the game
-- Cloud Relay: your data passes through serveo.net's SSH tunnel. This is opt-in and clearly labelled in the plugin panel
 
 ## Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | Port | 8282 | Port the MCP server listens on |
-| Connection mode | Local | Local / LAN / Tailscale / Cloud relay |
+| Connection mode | Local | Local / LAN / Tailscale |
 | Auth token | (empty) | Optional Bearer token for extra security |
 | Share stats | On | Allow the AI to read your skill levels |
 | Share equipment | On | Allow the AI to see equipped gear |
 | Share inventory | On | Allow the AI to see inventory contents |
 | Share location | On | Allow the AI to see your location |
 | Share username | On | Include your RSN in responses |
-| Stable subdomain | (empty) | Cloud Relay only — subdomain for a permanent URL |

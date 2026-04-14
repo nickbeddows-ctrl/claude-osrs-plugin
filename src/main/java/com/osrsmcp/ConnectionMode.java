@@ -4,8 +4,7 @@ public enum ConnectionMode
 {
     LOCAL("Local"),
     LAN("LAN"),
-    TAILSCALE("Tailscale"),
-    CLOUD_RELAY("Cloud relay");
+    TAILSCALE("Tailscale");
 
     private final String label;
 

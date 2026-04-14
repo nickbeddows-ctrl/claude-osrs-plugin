@@ -14,6 +14,7 @@ import javax.inject.Singleton;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Fetches and caches live GE prices from the OSRS Wiki prices API.
@@ -43,7 +44,11 @@ public class WikiPriceService
     private volatile long last1hFetch    = 0;
     private static final long TTL_5M     = 5  * 60 * 1000L;
     private static final long TTL_1H     = 60 * 60 * 1000L;
-    private volatile boolean mappingLoaded = false;
+    private final AtomicBoolean mappingLoading  = new AtomicBoolean(false);
+    private volatile boolean    mappingLoaded   = false;
+    private final AtomicBoolean pricesLoading   = new AtomicBoolean(false);
+    private final AtomicBoolean volume5mLoading = new AtomicBoolean(false);
+    private final AtomicBoolean volume1hLoading = new AtomicBoolean(false);
 
     // ── Data classes ──────────────────────────────────────────────────────────
 
@@ -142,6 +147,8 @@ public class WikiPriceService
         long ttl       = oneHour ? TTL_1H : TTL_5M;
 
         if (System.currentTimeMillis() - lastFetch < ttl) return;
+        AtomicBoolean loadingFlag = oneHour ? volume1hLoading : volume5mLoading;
+        if (!loadingFlag.compareAndSet(false, true)) return;
         try
         {
             String body = get(url);
@@ -172,6 +179,10 @@ public class WikiPriceService
         {
             log.warn("OSRS MCP: Failed to fetch {} volume data: {}", oneHour ? "1h" : "5m", e.getMessage());
         }
+        finally
+        {
+            loadingFlag.set(false);
+        }
     }
 
     private void ensureMappingLoaded()
@@ -195,6 +206,7 @@ public class WikiPriceService
     private void ensurePricesLoaded()
     {
         if (!isPricesCacheStale()) return;
+        if (!pricesLoading.compareAndSet(false, true)) return;
         try
         {
             String body = get(PRICES_URL);
@@ -224,6 +236,10 @@ public class WikiPriceService
         {
             log.warn("OSRS MCP: Failed to fetch Wiki prices: {}", e.getMessage());
         }
+        finally
+        {
+            pricesLoading.set(false);
+        }
     }
 
     private String get(String url) throws Exception
@@ -236,6 +252,8 @@ public class WikiPriceService
         {
             if (!response.isSuccessful())
                 throw new Exception("HTTP " + response.code());
+            if (response.body() == null)
+                throw new Exception("Empty response body");
             return response.body().string();
         }
     }

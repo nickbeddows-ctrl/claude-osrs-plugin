@@ -60,6 +60,8 @@ public class EquipmentStatsService
 
     // item name (lowercase) -> cached stats
     private final Map<String, EquipmentStats> cache = new ConcurrentHashMap<>();
+    // Cache compiled patterns per field key to avoid recompiling on every call
+    private final Map<String, java.util.regex.Pattern> fieldPatterns = new ConcurrentHashMap<>();
 
     public EquipmentStats getStats(String itemName)
     {
@@ -143,7 +145,9 @@ public class EquipmentStatsService
 
     private String field(String text, String key)
     {
-        Matcher m = Pattern.compile("\\|\\s*" + Pattern.quote(key) + "\\s*=\\s*([^\\|\\n\\}]+)").matcher(text);
+        Pattern p = fieldPatterns.computeIfAbsent(key, k ->
+            Pattern.compile("\\|\\s*" + Pattern.quote(k) + "\\s*=\\s*([^\\|\\n\\}]+)"));
+        Matcher m = p.matcher(text);
         if (!m.find()) return null;
         String val = m.group(1).replaceAll("\\[\\[([^\\|\\]]+)\\|?[^\\]]*\\]\\]", "$1")
                                .replaceAll("\\{\\{[^\\}]+\\}\\}", "")

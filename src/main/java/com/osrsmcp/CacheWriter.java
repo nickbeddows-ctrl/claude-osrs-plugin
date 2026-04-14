@@ -28,7 +28,9 @@ public class CacheWriter
         System.getProperty("user.home") + File.separator + ".runelite" + File.separator + "osrs-mcp";
     private static final DateTimeFormatter TIMESTAMP_FMT =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final NumberFormat NUM_FMT = NumberFormat.getInstance();
+    // NumberFormat is not thread-safe -- use ThreadLocal
+    private static final ThreadLocal<NumberFormat> NUM_FMT =
+        ThreadLocal.withInitial(NumberFormat::getInstance);
 
     @Inject private ItemManager itemManager;
     @Inject private WikiPriceService wikiPriceService;
@@ -45,7 +47,7 @@ public class CacheWriter
     }
 
     private String now() { return LocalDateTime.now().format(TIMESTAMP_FMT); }
-    private String gp(long v) { return NUM_FMT.format(v) + " gp"; }
+    private String gp(long v) { return NUM_FMT.get().format(v) + " gp"; }
 
     // ── CHARACTER ─────────────────────────────────────────────────────────────
 
@@ -122,6 +124,8 @@ public class CacheWriter
 
         long totalValue = 0;
         int coins = 0;
+        // Use long[] alongside String[] to avoid re-parsing formatted values for sort
+        List<long[]>   vals = new ArrayList<>();
         List<String[]> rows = new ArrayList<>();
 
         for (Item item : items)
@@ -136,13 +140,16 @@ public class CacheWriter
             totalValue += stackVal;
             rows.add(new String[]{name, String.valueOf(item.getQuantity()),
                 price > 0 ? gp(price) : "?", price > 0 ? gp(stackVal) : "?"});
+            vals.add(new long[]{stackVal});
         }
 
-        // Sort by stack value desc
-        rows.sort((a, b) -> {
-            long av = parseLong(a[3]); long bv = parseLong(b[3]);
-            return Long.compare(bv, av);
-        });
+        // Sort by stack value desc using raw longs
+        List<Integer> idx = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) idx.add(i);
+        idx.sort((a, b) -> Long.compare(vals.get(b)[0], vals.get(a)[0]));
+        List<String[]> sorted = new ArrayList<>();
+        for (int i : idx) sorted.add(rows.get(i));
+        rows = sorted;
 
         sb.append("**Total value:** ").append(gp(totalValue))
           .append("  **Coins:** ").append(gp(coins))
@@ -237,7 +244,9 @@ public class CacheWriter
     {
         if (cacheDir == null) return;
         File file = new File(cacheDir, filename);
-        try (FileWriter fw = new FileWriter(file))
+        try (java.io.BufferedWriter fw = new java.io.BufferedWriter(
+                 new java.io.OutputStreamWriter(new java.io.FileOutputStream(file),
+                     java.nio.charset.StandardCharsets.UTF_8)))
         {
             fw.write(content);
             log.debug("OSRS MCP: Wrote cache file: {}", filename);

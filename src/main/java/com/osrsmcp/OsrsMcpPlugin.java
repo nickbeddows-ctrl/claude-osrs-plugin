@@ -38,8 +38,6 @@ public class OsrsMcpPlugin extends Plugin
     @Inject private OsrsMcpConfig config;
     @Inject private McpServer mcpServer;
     @Inject private OsrsMcpPanel panel;
-    @Inject private RelayService relayService;
-    @Inject private RelayKeyService relayKeyService;
     @Inject private TailscaleService tailscaleService;
     @Inject private ConfigManager configManager;
     @Inject private PlayerDataService playerDataService;
@@ -54,7 +52,6 @@ public class OsrsMcpPlugin extends Plugin
         panel.setRestartCallback(this::restartServer);
         playerDataService.loadPersistedItems();
         cacheWriter.init();
-        panel.setRelayKeyService(relayKeyService);
         panel.setTailscaleService(tailscaleService);
         panel.setConfigManager(configManager);
         startServer();
@@ -97,24 +94,13 @@ public class OsrsMcpPlugin extends Plugin
             return;
         }
 
-        if (mode == ConnectionMode.CLOUD_RELAY)
-        {
-            panel.setRelayStatus(OsrsMcpPanel.RelayStatus.CONNECTING, null);
-            relayService.start(
-                config.port(),
-                url  -> panel.setRelayStatus(OsrsMcpPanel.RelayStatus.ACTIVE, url),
-                err  -> panel.setRelayStatus(OsrsMcpPanel.RelayStatus.ERROR, err),
-                regUrl -> panel.setRelayStatus(OsrsMcpPanel.RelayStatus.NEEDS_REGISTRATION, regUrl)
-            );
-        }
+
     }
 
     private void stopServer()
     {
-        relayService.stop();
         mcpServer.stop();
         panel.setServerRunning(false, 0, ConnectionMode.LOCAL, null);
-        panel.setRelayStatus(OsrsMcpPanel.RelayStatus.OFF, null);
     }
 
     private void restartServer()
@@ -134,8 +120,8 @@ public class OsrsMcpPlugin extends Plugin
     @Subscribe
     public void onStatChanged(StatChanged event)
     {
-        // Debounce -- write character cache once after a burst of stat changes
-        javax.swing.SwingUtilities.invokeLater(() -> writeCharacterCache());
+        // Already on client thread -- write character cache directly
+        writeCharacterCache();
     }
 
     private void writeCharacterCache()
@@ -162,16 +148,18 @@ public class OsrsMcpPlugin extends Plugin
         int id = event.getContainerId();
         if (id == InventoryID.BANK.getId())
         {
-            net.runelite.api.Item[] items = event.getItemContainer().getItems();
-            cacheWriter.writeBank(items);
+            // Copy items array before handing off to background thread
+            net.runelite.api.Item[] items = event.getItemContainer().getItems().clone();
+            java.util.concurrent.CompletableFuture.runAsync(() -> cacheWriter.writeBank(items));
         }
         else if (id == InventoryID.SEED_VAULT.getId())
         {
-            cacheWriter.writeSeedVault(event.getItemContainer().getItems());
+            net.runelite.api.Item[] items = event.getItemContainer().getItems().clone();
+            java.util.concurrent.CompletableFuture.runAsync(() -> cacheWriter.writeSeedVault(items));
         }
         else if (id == InventoryID.EQUIPMENT.getId())
         {
-            // Write equipment cache
+            // Collect item names on client thread, then write to disk in background
             java.util.Map<String, String> slotToItem = new java.util.LinkedHashMap<>();
             String[] slotNames = {"head","cape","amulet","weapon","body","shield",
                                   "legs","hands","feet","ring","ammo"};
@@ -184,7 +172,11 @@ public class OsrsMcpPlugin extends Plugin
                     slotToItem.put(slotNames[i], name);
             }
             if (!slotToItem.isEmpty())
-                cacheWriter.writeEquipment(slotToItem, equipmentStatsService);
+            {
+                java.util.Map<String, String> snapshot = new java.util.LinkedHashMap<>(slotToItem);
+                java.util.concurrent.CompletableFuture.runAsync(
+                    () -> cacheWriter.writeEquipment(snapshot, equipmentStatsService));
+            }
         }
     }
 

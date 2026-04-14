@@ -39,6 +39,16 @@ public class DropTableService
         public double expectedValuePer; // expected GP per kill from this drop
     }
 
+    // Pre-compiled patterns
+    private static final Pattern DROPS_LINE_PATTERN = Pattern.compile("\\{\\{DropsLine\\|([^\\}]+)\\}\\}");
+    private static final Pattern RARITY_PATTERN    = Pattern.compile("(\\d+)/(\\d+)");
+    private static final Pattern RANGE_QTY_PATTERN = Pattern.compile("(\\d+)-(\\d+)");
+    private static final Pattern SINGLE_QTY_PATTERN= Pattern.compile("(\\d+)");
+
+    // Cached name->id lookup built once from WikiPriceService mapping
+    private final Map<String, Integer> nameToIdCache = new ConcurrentHashMap<>();
+    private volatile boolean nameToIdBuilt = false;
+
     private final Map<String, CachedDrops> cache = new ConcurrentHashMap<>();
 
     private static class CachedDrops
@@ -96,8 +106,7 @@ public class DropTableService
     {
         List<DropEntry> drops = new ArrayList<>();
         // Match {{DropsLine|name=X|quantity=Y|rarity=Z|...}}
-        Pattern p = Pattern.compile("\\{\\{DropsLine\\|([^\\}]+)\\}\\}");
-        Matcher m = p.matcher(wikiText);
+        Matcher m = DROPS_LINE_PATTERN.matcher(wikiText);
         while (m.find())
         {
             String params = m.group(1);
@@ -119,8 +128,8 @@ public class DropTableService
 
     private String param(String params, String key)
     {
-        Pattern p = Pattern.compile("(?:^|\\|)" + Pattern.quote(key) + "=([^\\|]+)");
-        Matcher m = p.matcher(params);
+        // Pattern compiled per-call here is unavoidable since key varies, but it's a short string
+        Matcher m = Pattern.compile("(?:^|\\|)" + Pattern.quote(key) + "=([^\\|]+)").matcher(params);
         if (!m.find()) return null;
         return m.group(1).replaceAll("<[^>]+>", "").replaceAll("\\{\\{[^\\}]+\\}\\}", "").trim();
     }
@@ -129,7 +138,7 @@ public class DropTableService
     {
         if (rarity == null || "always".equalsIgnoreCase(rarity) || "varies".equalsIgnoreCase(rarity)) return 0;
         // Handle N/D format
-        Matcher m = Pattern.compile("(\\d+)/(\\d+)").matcher(rarity);
+        Matcher m = RARITY_PATTERN.matcher(rarity);
         if (m.find())
         {
             double n = Double.parseDouble(m.group(1));
@@ -139,15 +148,22 @@ public class DropTableService
         return 0;
     }
 
+    private Map<String, Integer> getNameToId()
+    {
+        if (!nameToIdBuilt)
+        {
+            Map<Integer, WikiPriceService.ItemMeta> allMeta = wikiPriceService.getAllMeta();
+            for (Map.Entry<Integer, WikiPriceService.ItemMeta> entry : allMeta.entrySet())
+                if (entry.getValue() != null && entry.getValue().name != null)
+                    nameToIdCache.put(entry.getValue().name.toLowerCase(), entry.getKey());
+            nameToIdBuilt = true;
+        }
+        return nameToIdCache;
+    }
+
     private void enrichWithPrices(List<DropEntry> drops)
     {
-        Map<Integer, WikiPriceService.ItemMeta> allMeta = wikiPriceService.getAllMeta();
-        // Build name->id lookup
-        Map<String, Integer> nameToId = new HashMap<>();
-        for (Map.Entry<Integer, WikiPriceService.ItemMeta> entry : allMeta.entrySet())
-            if (entry.getValue() != null && entry.getValue().name != null)
-                nameToId.put(entry.getValue().name.toLowerCase(), entry.getKey());
-
+        Map<String, Integer> nameToId = getNameToId();
         for (DropEntry drop : drops)
         {
             Integer id = nameToId.get(drop.name.toLowerCase());
@@ -171,10 +187,10 @@ public class DropTableService
     {
         if (qty == null) return 1;
         qty = qty.replaceAll("\\(noted\\)", "").trim();
-        Matcher range = Pattern.compile("(\\d+)-(\\d+)").matcher(qty);
+        Matcher range = RANGE_QTY_PATTERN.matcher(qty);
         if (range.find())
             return (Double.parseDouble(range.group(1)) + Double.parseDouble(range.group(2))) / 2.0;
-        Matcher single = Pattern.compile("(\\d+)").matcher(qty);
+        Matcher single = SINGLE_QTY_PATTERN.matcher(qty);
         if (single.find()) return Double.parseDouble(single.group(1));
         return 1;
     }

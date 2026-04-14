@@ -187,25 +187,37 @@ public class FarmingPatchService
         return new String[]{"Unknown", "unknown"};
     }
 
+    // Cached grimy herb name -> item ID, built once from WikiPriceService mapping
+    private final java.util.concurrent.ConcurrentHashMap<String, Integer> herbNameToId =
+        new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile boolean herbMapBuilt = false;
+
+    private Integer getHerbId(String grimyName)
+    {
+        if (!herbMapBuilt)
+        {
+            Map<Integer, WikiPriceService.ItemMeta> allMeta = wikiPriceService.getAllMeta();
+            for (Map.Entry<Integer, WikiPriceService.ItemMeta> entry : allMeta.entrySet())
+            {
+                WikiPriceService.ItemMeta meta = entry.getValue();
+                if (meta != null && meta.name != null && meta.name.toLowerCase().startsWith("grimy "))
+                    herbNameToId.put(meta.name.toLowerCase(), entry.getKey());
+            }
+            herbMapBuilt = true;
+        }
+        return herbNameToId.get(grimyName.toLowerCase());
+    }
+
     private void attachHerbPrice(Map<String, Object> patch, String herbName)
     {
-        // Try to find the grimy herb item name
-        String grimyName = "Grimy " + herbName.toLowerCase();
-        Map<Integer, WikiPriceService.ItemMeta> allMeta = wikiPriceService.getAllMeta();
-        for (Map.Entry<Integer, WikiPriceService.ItemMeta> entry : allMeta.entrySet())
+        String grimyName = "grimy " + herbName.toLowerCase();
+        Integer id = getHerbId(grimyName);
+        if (id == null) return;
+        WikiPriceService.PriceData pd = wikiPriceService.getPrice(id);
+        if (pd != null && pd.low > 0)
         {
-            WikiPriceService.ItemMeta meta = entry.getValue();
-            if (meta == null || meta.name == null) continue;
-            if (meta.name.equalsIgnoreCase(grimyName))
-            {
-                WikiPriceService.PriceData pd = wikiPriceService.getPrice(entry.getKey());
-                if (pd != null && pd.low > 0)
-                {
-                    patch.put("herb_ge_price", pd.low);
-                    patch.put("herb_item_name", meta.name);
-                }
-                break;
-            }
+            patch.put("herb_ge_price", pd.low);
+            patch.put("herb_item_name", "Grimy " + herbName.toLowerCase());
         }
     }
 }
