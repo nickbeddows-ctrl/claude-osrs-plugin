@@ -154,7 +154,7 @@ public class OsrsMcpPlugin extends Plugin
     }
 
     @Subscribe
-    public void onItemContainerChanged2(ItemContainerChanged event)
+    public void onItemContainerChanged(ItemContainerChanged event)
     {
         playerDataService.onBankChanged(event);
         int id = event.getContainerId();
