@@ -1005,6 +1005,146 @@ public class PlayerDataService
         return result;
     }
 
+        // ── BIS COMPARISON (Phase 16) ─────────────────────────────────────────────
+
+    /**
+     * Compares current gear against bank items slot-by-slot for a given combat style.
+     * style: "melee", "ranged", or "magic"
+     */
+    public Map<String, Object> buildBisComparison(String style)
+    {
+        if (!isLoggedIn()) return errorMap("Player is not logged in");
+        if (style == null || style.trim().isEmpty()) style = "melee";
+        style = style.toLowerCase().trim();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("style", style);
+
+        // ── Current gear ──────────────────────────────────────────────────────
+        ItemContainer worn = client.getItemContainer(InventoryID.EQUIPMENT);
+        if (worn == null) return errorMap("No equipment data available");
+
+        String[] slotNames = {"head","cape","amulet","weapon","body","shield",
+                              "legs","hands","feet","ring","ammo","","",""};
+        Item[] wornItems = worn.getItems();
+
+        // Build map of slot -> current item name + stats
+        Map<String, Map<String, Object>> currentGear = new LinkedHashMap<>();
+        for (int i = 0; i < wornItems.length && i < slotNames.length; i++)
+        {
+            if (slotNames[i].isEmpty()) continue;
+            Item item = wornItems[i];
+            if (item == null || item.getId() <= 0) continue;
+            String name = itemManager.getItemComposition(item.getId()).getName();
+            if (name == null || name.equals("null")) continue;
+            EquipmentStatsService.EquipmentStats stats = equipmentStatsService.getStats(name);
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", name);
+            entry.put("id", item.getId());
+            if (stats != null) entry.put("stats", stats.toMap());
+            currentGear.put(slotNames[i], entry);
+        }
+        result.put("current_gear", currentGear);
+
+        // ── Bank gear ─────────────────────────────────────────────────────────
+        if (cachedBankItems == null)
+        {
+            result.put("upgrades_found", false);
+            result.put("message", "Open your bank to compare with banked items.");
+            return result;
+        }
+
+        // Filter bank to equippable items, group by inferred slot
+        Map<String, List<String>> bankBySlot = new LinkedHashMap<>();
+        for (Item item : cachedBankItems)
+        {
+            if (item.getId() <= 0 || item.getQuantity() <= 0) continue;
+            net.runelite.api.ItemComposition comp = itemManager.getItemComposition(item.getId());
+            String name = comp.getName();
+            if (name == null || name.equals("null")) continue;
+            String[] actions = comp.getInventoryActions();
+            boolean equippable = false;
+            if (actions != null)
+                for (String a : actions)
+                    if ("Wear".equals(a) || "Wield".equals(a)) { equippable = true; break; }
+            if (!equippable) continue;
+
+            // Infer slot -- reuse logic from buildBankClassified
+            String nameLower = name.toLowerCase();
+            boolean wield = false;
+            if (actions != null) for (String a : actions) if ("Wield".equals(a)) wield = true;
+            String slot = inferSlot(nameLower, wield);
+            bankBySlot.computeIfAbsent(slot, k -> new ArrayList<>()).add(name);
+        }
+
+        // ── Slot-by-slot comparison ───────────────────────────────────────────
+        List<Map<String, Object>> upgrades = new ArrayList<>();
+        List<Map<String, Object>> compared  = new ArrayList<>();
+
+        for (Map.Entry<String, Map<String, Object>> entry : currentGear.entrySet())
+        {
+            String slot = entry.getKey();
+            Map<String, Object> current = entry.getValue();
+            String currentName = (String) current.get("name");
+            EquipmentStatsService.EquipmentStats currentStats =
+                (current.get("stats") != null) ? equipmentStatsService.getStats(currentName) : null;
+
+            List<String> candidates = bankBySlot.getOrDefault(slot, Collections.emptyList());
+            Map<String, Object> slotResult = new LinkedHashMap<>();
+            slotResult.put("slot", slot);
+            slotResult.put("equipped", currentName);
+            slotResult.put("equipped_score", scoreItem(currentStats, style));
+
+            List<Map<String, Object>> options = new ArrayList<>();
+            for (String candidateName : candidates)
+            {
+                if (candidateName.equalsIgnoreCase(currentName)) continue;
+                EquipmentStatsService.EquipmentStats cStats = equipmentStatsService.getStats(candidateName);
+                if (cStats == null) continue;
+                double score = scoreItem(cStats, style);
+                double currentScore = scoreItem(currentStats, style);
+                if (score > currentScore)
+                {
+                    Map<String, Object> opt = new LinkedHashMap<>();
+                    opt.put("name",  candidateName);
+                    opt.put("score", score);
+                    opt.put("score_gain", score - currentScore);
+                    opt.put("stats", cStats.toMap());
+                    options.add(opt);
+                }
+            }
+            options.sort((a, b) -> Double.compare((double) b.get("score_gain"), (double) a.get("score_gain")));
+            if (!options.isEmpty())
+            {
+                slotResult.put("best_upgrade", options.get(0));
+                upgrades.add(slotResult);
+            }
+            compared.add(slotResult);
+        }
+
+        result.put("upgrades_available", !upgrades.isEmpty());
+        result.put("upgrade_count",      upgrades.size());
+        result.put("upgrades",           upgrades);
+        result.put("full_comparison",    compared);
+        return result;
+    }
+
+    /**
+     * Score an item for a given combat style.
+     * Higher = better for that style.
+     */
+    private double scoreItem(EquipmentStatsService.EquipmentStats stats, String style)
+    {
+        if (stats == null) return 0;
+        switch (style)
+        {
+            case "melee":  return stats.str + stats.aslash + stats.acrush + stats.astab;
+            case "ranged": return stats.arange + (stats.str / 2.0); // ranged str stored in str slot
+            case "magic":  return stats.amagic;
+            default:       return stats.str + stats.aslash;
+        }
+    }
+
         // ── BANK CLASSIFICATION (Phase 10) ───────────────────────────────────────
 
     public Map<String, Object> buildBankClassified()
