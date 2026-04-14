@@ -59,7 +59,7 @@ public class CacheWriter
         sb.append("| Field | Value |\n|-------|-------|\n");
         sb.append("| Username | ").append(username).append(" |\n");
         sb.append("| Account type | ").append(accountType != null ? accountType.replace("_", " ") : "normal").append(" |\n");
-        if (isIronman) sb.append("| Ironman | Yes -- no trading, GE restricted or unavailable |\n");
+        if (isIronman) sb.append("| Ironman | Yes -- no player trading, GE usable for bonds only, must be self-sufficient |\n");
         sb.append("| Combat level | ").append(combatLevel).append(" |\n");
         if (location != null) sb.append("| Location | ").append(location).append(" |\n");
         sb.append("\n## Skills\n");

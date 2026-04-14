@@ -118,13 +118,10 @@ public class PlayerDataService
             List<String> restrictions = new ArrayList<>();
             restrictions.add("cannot trade with other players");
             restrictions.add("cannot receive items from other players");
-            if (isUim)
-            {
-                restrictions.add("no bank access");
-                restrictions.add("no GE access");
-            }
-            if (isHcim) restrictions.add("hardcore: permanent death removes HC status");
-            if (isGroupIm) restrictions.add("can trade within group members");
+            restrictions.add("GE access limited to bonds only -- cannot buy or sell any other items");
+            if (isUim) restrictions.add("no bank access -- must carry all items");
+            if (isHcim) restrictions.add("hardcore: unsafe death removes HC status");
+            if (isGroupIm) restrictions.add("can trade items within group members only");
             result.put("ironman_restrictions", restrictions);
         }
         Map<String, Map<String, Object>> skills = new LinkedHashMap<>();
@@ -1560,7 +1557,7 @@ public class PlayerDataService
             return result;
         }
         if (at != net.runelite.api.vars.AccountType.NORMAL)
-            result.put("ironman_note", "Ironman accounts can use the GE to buy items but cannot sell player-obtained items. These suggestions reflect buy margins only.");
+            result.put("ironman_note", "Ironman accounts can only use the GE to buy bonds. All other items must be self-obtained. Flip suggestions are not applicable.");
         if (cachedBankItems == null)
         {
             result.put("error", "Bank not yet opened this session. Open your bank first.");
@@ -1645,7 +1642,7 @@ public class PlayerDataService
         result.put("is_ironman",   mmAt != net.runelite.api.vars.AccountType.NORMAL);
         result.put("is_uim",       mmAt == net.runelite.api.vars.AccountType.ULTIMATE_IRONMAN);
         if (mmAt != net.runelite.api.vars.AccountType.NORMAL)
-            result.put("note", "Ironman restrictions apply -- no player trading, GE limited or unavailable. Focus on self-sufficient money making methods.");
+            result.put("note", "Ironman restrictions apply -- no player trading, GE only usable for bonds. All items must be self-obtained. Money making methods must be self-sufficient (bossing, skilling, alching, thieving etc.).");
         return result;
     }
 }
